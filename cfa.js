@@ -317,7 +317,12 @@ var CFA = (function() {
 	    tgt = 0.0;
 	 return function(state) {
 	    var diff = (tgt - state.color[component]);
-	    state[nm][component] += (adj * diff);
+	    var fin = state[nm][component] + (adj * diff);
+	    if (fin < 0) 
+	       fin = 0
+	    if (fin > 1)
+	       fin = 1
+	    state[nm][component] = fin;
 	 };
       };
    };
@@ -412,26 +417,24 @@ var CFA = (function() {
 
    var trans_color = function(c) {
       // HSB is the same as HSV? but canvas knows HSL.
-      // http://ariya.blogspot.com/2008/07/converting-between-hsl-and-hsv.html
+      // http://wiki.secondlife.com/wiki/Color_conversion_scripts#HSL_to_HSV
       var insat = c[1];
       var inval = c[2];
 
       var h = c[0]; // hue stays the same.
 
-      var l = (2 - insat) * inval;
+      var l = (2 - insat) * (inval * 0.5);
       var s = insat * inval;
-      /*if (l <= 1)
+
+      if (l <= 1)
 	 s = s / l;
       else 
-	 if (l < 1.9)
-	    s = s / (2 - l);
-      */
-      l = l / 2;
+	 s = s / (2 - l);
+
 
 
       var a = c[3];
       var result = "hsla(" + h + "," + (s * 100) + "%," + (l * 100) + "%," + a + ")"
-
       return result;
    }
    var builtin_circle = function(state, cc) {
@@ -558,7 +561,8 @@ var CFA = (function() {
 	 start_rule : "",
 	 compiled_rules : {
 	     'CIRCLE' : builtin_circle,
-	    'SQUARE' : builtin_square
+	    'SQUARE' : builtin_square,
+	    'TRIANGLE' : builtin_square
 	 },
 	 background : [0,0,1,1],
 	 paths : {},
@@ -576,8 +580,8 @@ var CFA = (function() {
 	 var t = state.transform
 	 var xlen_sq = t[0] * t[0] + t[1]*t[1];
 	 var ylen_sq = t[2] * t[2] + t[3]*t[3];
-	 if (xlen_sq < 0.5 | ylen_sq < 0.5) { 
-	    // when we're smaller than 1/2 pixel, give up.
+	 if (xlen_sq < 0.05 | ylen_sq < 0.05) { 
+	    // when we're small, call it done.
 	    return cc;
 	 }
 	 if (state.depth > 10000) {
@@ -590,6 +594,19 @@ var CFA = (function() {
       }
    };
    
+   var sampling_opts = {
+      recurse : function(f,state,cc) {
+	 var xlen_sq = t[0] * t[0] + t[1]*t[1];
+	 var ylen_sq = t[2] * t[2] + t[3]*t[3];
+	 if (xlen_sq < 0.5 | ylen_sq < 0.5)
+	    return cc;
+	 if (state.depth > 1000)
+	    return cc;
+	 return function() { return f(state,cc); }
+      },
+      cont : function(cc) { return cc; }
+   }
+
    var call_trampoline = function(f) {
       var cur = f;
       var count = 0;
@@ -627,7 +644,8 @@ var CFA = (function() {
 	 cfa.canvas.fillStyle = trans_color(cfa.background);
 	 cfa.canvas.fillRect(0,0,w,h);
 
-	 var initial_adj = compile_adjustment([scale(0.5,0.5)]);
+	 // TODO: Determine bounding box by sampling the shape:
+	 var initial_adj = compile_adjustment([scale(0.2,0.2)]);
 	 
 	 var initial_state = {
 	    color : [0,0,0,1],
