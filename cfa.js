@@ -44,9 +44,21 @@ var CFA = (function() {
 
    };
 
+   var prty = function(a,f) {
+      pstr = [];
+      for (var i = 0; i < a.length; i++) {
+	 if (!!a[i].pretty) 
+	    pstr.push(a[i]);
+	 else
+	    pstr.push(a[i].pretty);
+      }
+      f.pretty = "" + pstr + "";
+      return f;
+   }
+
    // Simple combinator parsers. Not particularly efficient.
    var p = function(rx) { // parse a regex.
-      return function(instr) {
+      return prty(arguments,function(instr) {
 	 var str = chomp(instr);
 	 var m = rx.exec(str);
 	 if (null == m) 
@@ -55,23 +67,21 @@ var CFA = (function() {
 	    return [];
 	 }
 	 return [[m[1], str.substr(m.index + m[0].length)]]; // return 1st paren group
-      };
+      });
    };
 
    var alt = function() {
       var alts = arguments;
-      return function(str) {
-	 console.log(str.length);
+      return prty(arguments,function(str) {
 
 	 var rs = [];
-	 for (i = 0; i < alts.length; i++) {
+	 for (var i = 0; i < alts.length; i++) {
 	    var res = alts[i](str);
 	    rs.push(res);
 	 }
 
-
 	 return [].concat.apply([], rs);
-      }
+      });
    };
    
    var seq_i = function(a,b) { // sequence two parsers
@@ -368,8 +378,8 @@ var CFA = (function() {
 
       var p_rule = 
       //alt(
-	  seq([lit("rule"), ident,rbody],
-	      function(_,nm,bdy) { return rule(nm,1.0,bdy); });
+	  seq([lit("rule"), ident, alt(number, succeed(1.0)) ,rbody],
+	      function(_,nm,wt,bdy) { return rule(nm,wt,bdy); });
 	  //seq([lit("rule"), ident, number, rbody],
 	  //    function(_,nm,weight,body) { return rule(nm,weight,body); })
 	 //);
