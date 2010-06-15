@@ -22,6 +22,8 @@ var CFA = (function() {
 
    // -------- Preliminaries : Parsing framework. -----------------
    var chomp = function(str) {
+      if (str.length == 0)
+	 return str;
       var i = 0;
       while (i < str.length) {
 	 if (/\s/m.test(str[i])) {
@@ -59,9 +61,14 @@ var CFA = (function() {
    var alt = function() {
       var alts = arguments;
       return function(str) {
+	 console.log(str.length);
+
 	 var rs = [];
-	 for (i = 0; i < alts.length; i++)
-	    rs.push(alts[i](str));
+	 for (i = 0; i < alts.length; i++) {
+	    var res = alts[i](str);
+	    rs.push(res);
+	 }
+
 
 	 return [].concat.apply([], rs);
       }
@@ -81,6 +88,7 @@ var CFA = (function() {
 	       res_fin.push( [[a_obj,b_obj], rb[1]] );
 	    }
 	 }
+
 	 return res_fin;
       }
    };
@@ -127,12 +135,20 @@ var CFA = (function() {
 
    var many = function(parser) {
       return function(str) {
+	 var hmm = parser("");
+	 if (hmm.length != 0) {
+	    alert("aha!");
+	    return;
+	 }
 	 return alt(succeed([]),
 		    seq([parser, many(parser)], 
 			function(hd,rest) {
 			   return [hd].concat(rest); }))(str);
-      }
+      };
    };
+
+   var some = function(p) { return seq([p,many(p)],
+				      function(hd,rst) { return [hd].concat(rst);} ); };
 
    var end_of_input = function(instr) {
       var str = chomp(instr);
@@ -143,19 +159,6 @@ var CFA = (function() {
    }
 
    var lit = function(x) { return p(new RegExp("(" + x + ")")); }
-
-   var s_alts = function(kwds) { // shorthand alts.
-      // Helper:
-      alts = [];
-      for (var k in kwds) {
-	 var body = kwds[k];
-	 var s = body[0];
-	 var f = body[1];
-	 s.unshift(k);
-	 alts.push(s,f)
-      }
-      return alt.apply({},alts);
-   }
 
    // ------ Context Free Art -----------
    
@@ -323,34 +326,62 @@ var CFA = (function() {
    var parse_cva = function(str) {
 
       // Adjustments:
-      var adj = s_alts({
+      var adj = 
+      alt(
 	 // Shape adjustments:
-	 literal('x') : [[number], function(_,x) { return translate(x,0.0); }],
-	 literal('y') : [[number], function(_,y) { return translate(0.0,y); }],
-	 literal('z') : [[number], function(_,y) { return translate(0.0,0.0); }],
-	 alt(literal('size'),literal('s')) : 
-	    [[number], function(_,s) { return scale(s,s); }],
-	 alt(literal('size'),literal('s')) : 
-	    [[number, number], function(_,sx,sy) { return scale(sx,sy); }],
-	 alt(literal('size'),literal('s')) : 
-	    [[number, number, number], function(_,sx,sy,sz) { return scale(sx,sy); }],
-	 alt(literal('rotate'),literal('r')) : 
-	    [[number], function(_,r) { return rotate(r); }],
-	 alt(literal('flip'), literal('f')) : 
-	    [[number], function(_,f) { return flip(f); }],
-	 literal('skew'): 
-	    [[number, number], function(a,b) { return skew(a,b); }]
-	 
-      });
+	  seq([lit('x'),number], function(_,x) { return translate(x,0.0); }),
+	  seq([lit('y'), number], function(_,y) { return translate(0.0,y); }),
+	  seq([lit('z'), number], function(_,y) { return translate(0.0,0.0); }),
+	  seq([lit('size'),number], function(_,s) { return scale(s,s); }),
+	  seq([lit('size'),number,number], 
+	      function(_,sx,sy) { return scale(sx,sy); }),
+	  seq([lit('size'),number,number,number], 
+	      function(_,sx,sy,sz) { return scale(sx,sy); }),
+	  seq([lit('s'),number], function(_,s) { return scale(s,s); }),
+	  seq([lit('s'),number,number], 
+	      function(_,sx,sy) { return scale(sx,sy); }),
+	  seq([lit('s'),number,number,number], 
+	      function(_,sx,sy,sz) { return scale(sx,sy); }),
+	 seq([lit('rotate'),number],
+	     function(_,f) { return rotate(f); }),
+	 seq([lit('r'),number],
+	     function(_,f) { return rotate(f); }),
+	 seq([lit('flip'),number],
+	     function(_,f) { return flip(f); }),
+	 seq([lit('f'),number],
+	     function(_,f) { return flip(f); }),
+	 seq([lit('skew'),number, number], 
+	     function(a,b) { return skew(a,b); })
+	  // TODO: color adjustments.
+	  );
+	  
       var adjustment = alt(seq([p(/(\[)/), many(adj), p(/(\])/)], function(_,adjs,_) {  return adjs; }),
 			   seq([p(/(\{)/), many(adj), p(/(\})/)], function(_,adjs,_) { return reorder(adjs); }));
 			   
+
+      // Read a rule!
+      var statement = seq([ident, adjustment],
+			  function(nm,adj) { return apply_rule(nm,adj); })
+      var rbody = seq([p(/(\{)/),some(statement), p(/(\})/)],
+		      function(_,b,_) { return b; });
+
+
+      var p_rule = 
+      //alt(
+	  seq([lit("rule"), ident,rbody],
+	      function(_,nm,bdy) { return rule(nm,1.0,bdy); });
+	  //seq([lit("rule"), ident, number, rbody],
+	  //    function(_,nm,weight,body) { return rule(nm,weight,body); })
+	 //);
 
       // directives
       var directive = alt(seq([lit("startshape"), ident], 
 			      function(_,nm) { return startshape(nm); }),
 			  seq([lit("include"), fname],
-			      function(_,nm) { return include(nm); })
+			      function(_,nm) { return include(nm); }),
+			  seq([lit("tile"), adjustment], 
+			      function(_,adj) { return tile(adj); }),
+			  p_rule
 			  );
 
 
