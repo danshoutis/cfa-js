@@ -3,8 +3,8 @@
 var CFA = (function() {
    // --------- Preliminaries: Math. ------------
    var vect_x_mat = function(v,m) {
-      return [v[0] * m[0] + v[0] * m[1] + m[4],
-	      v[1] * m[2] + v[1] * m[3] + m[5]];
+      return [v[0] * m[0] + v[1] * m[2] + m[4],
+	      v[0] * m[1] + v[1] * m[3] + m[5]];
    };
    
    var mat_x_mat = function(a,b) {
@@ -44,21 +44,9 @@ var CFA = (function() {
 
    };
 
-   var prty = function(a,f) {
-      pstr = [];
-      for (var i = 0; i < a.length; i++) {
-	 if (!!a[i].pretty) 
-	    pstr.push(a[i]);
-	 else
-	    pstr.push(a[i].pretty);
-      }
-      f.pretty = "" + pstr + "";
-      return f;
-   }
-
    // Simple combinator parsers. Not particularly efficient.
    var p = function(rx) { // parse a regex.
-      return prty(arguments,function(instr) {
+      return (function(instr) {
 	 var str = chomp(instr);
 	 var m = rx.exec(str);
 	 if (null == m) 
@@ -72,7 +60,7 @@ var CFA = (function() {
 
    var alt = function() {
       var alts = arguments;
-      return prty(arguments,function(str) {
+      return (function(str) {
 
 	 var rs = [];
 	 for (var i = 0; i < alts.length; i++) {
@@ -145,11 +133,6 @@ var CFA = (function() {
 
    var many = function(parser) {
       return function(str) {
-	 var hmm = parser("");
-	 if (hmm.length != 0) {
-	    alert("aha!");
-	    return;
-	 }
 	 return alt(succeed([]),
 		    seq([parser, many(parser)], 
 			function(hd,rest) {
@@ -178,7 +161,7 @@ var CFA = (function() {
    };
    var rule = function(nm,prob,body) {
       return function(cfa) { 
-	 if (!!cfa.rules[nm])
+	 if (!!!cfa.rules[nm])
 	    cfa.rules[nm] = [];
 	 cfa.rules[nm].push([prob,body]);
       };
@@ -186,17 +169,18 @@ var CFA = (function() {
    var include = function(incpath) {
       return function(cfa) {
 	 if (!cfa.inc_warned)
-	    alert("Warning: includes not supported.");
+	    console.log("Warning: includes not supported.");
 	 cfa.inc_warned = true;
       };
    };
    var tile = function(ignored) {
       return function(cfa) {
-	 alert("Warning: tiling not supported.");
+	 console.log("Warning: tiling not supported.");
       };
    };
    var bkgd = function(color_trans) {
       return function(cfa) {
+	 console.log("applying bkgd", color_trans);
 	 var dummy_state = { color : [0,0,1,1] };
 	 color_trans(dummy_state);
 	 cfa.background = dummy_state.color;
@@ -207,33 +191,123 @@ var CFA = (function() {
 	 cfa.paths[nm] = cmds;
       };
    };
+
+
+   // Sequence function of (state, cc) in continuation-passing style.
+   // --
+   var seq_cps = function(fns) {
+      if (fns.length == 0)
+	 return function(st,cc) { return cc(); }
+      if (fns.length == 1)
+	 return fns[0];
+      var hd = fns.shift();
+      var tl = seq_cps(fns);
+      return function(st,cc) {
+	 return hd(st, function() { return tl(st,cc); });
+      }
+   }
+
+   var compile_rule_body = function(bdy) { return seq_cps(bdy); }
+
+   var compile_rule = function(rule_bodies) {
+      var splits = [];
+      var rs = [];
+      var tot = 0.0;
+      for (var i = 0; i < rule_bodies.length; i++) {
+	 rs.push(compile_rule_body(rule_bodies[i][1]));
+	 tot += rule_bodies[i][0];
+	 splits.push(rule_bodies[i][0]);
+      }
+
+      var cur = 0.0;
+      for (var i = 0; i < splits.length; i++) {
+	 splits[i] = cur + ((1.0 / tot) * splits[i]);
+	 cur = splits[i];
+      }
+
+      return function(state,cc) {
+	 r = Math.random();
+	 for (var i = 0; i < rs.length; i++) {
+	    if (r < splits[i])
+	       return rs[i](state,cc);
+	 }
+	 console.log("Badness in weighted random?");
+	 return rs[0](state,cc);
+      };
+   }
+
+   // Apply a rule w/ given adjustments!
+   // ...Recursion happens here..
+   var with_saved_state = function(callback, state, cc) {
+      // Save the state:
+      var depth = state.depth;
+      var cfa = state.cfa;
+      var color = [].concat(state.color);
+      var transform = [].concat(state.transform);
+      var target_color = [].concat(state.target_color);
+
+      // Construct continuation that restores state.
+      var cont = function() {
+	 state.depth = depth;
+	 state.cfa = cfa;
+	 state.color = [].concat(color);
+	 state.transform = [].concat(transform);
+	 state.target_color = [].concat(target_color);
+	 return state.cfa.cont(cc);
+      };
+
+      return callback(state,cont);
+   }
+
    var apply_rule = function(nm, trans) {
-      return function(cfa) {
-	 return function(state, cc) {
-	    var nstate = {};
-	    nstate.color = [].concat(state.color);
-	    nstate.transform = [].concat(state.transform);
-	    nstate.target_color = [].concat(state.target_color);
-	    var cont = function() {
-	       state.color = nstate.color;
-	       state.transform = nstate.transform;
-	       state.target_color = nstate.target_color;
-	       return cc();
-	    };
-	    return cfa.compiled_rules[nm](cont);
-	 };
+      return function(state, cc) {
+	 
+	 var cfa = state.cfa; 
+
+	 // Lazy compile if needed:
+	 if (!!!cfa.compiled_rules[nm]) {
+
+	    console.log("compiling: " + nm);
+	    cfa.compiled_rules[nm] = compile_rule(state.cfa.rules[nm]);
+	 }
+
+	 return with_saved_state(function(state,cont) {
+	    trans(state); // Apply the transform.
+	    state.depth += 1;
+	    
+	    // Call the rule. (With recursion-limiting wrapper.)
+	    return cfa.recurse(cfa.compiled_rules[nm], state, cont);
+	 }, state, cc);
+
       };
    };
+
+   var ntimes_apply = function(count, action, adj) {
+      if (0 >= count) { 
+	 return function(state,cc) {
+	    return state.cfa.cont(cc);
+	 }
+      }
+
+      var hd = action;
+      var rest = ntimes_apply(count-1,action,adj);
+      
+      return function(state, cc) {
+	 adj(state);
+	 return hd(state, function() { return rest(state, cc); });
+      }
+   }
 
    // Color adjustments 
    // -----------------
    var hue_i = function(nm) {
       return function(v) {
 	 return function(state) {
-	    state[nm][0] += (v % 360);
+	    state[nm][0] = ((state[nm][0] + v) % 360);
 	 };
       };
    };
+
    var hue = hue_i("color");
    var mult_color_adjust = function(nm,component) {
       return function(v) {
@@ -264,7 +338,7 @@ var CFA = (function() {
    var brightness_tgt = tgt_color_adjust(2);
    var alpha = mult_color_adjust("color",3);
    var alpha_tgt = tgt_color_adjust(3);
-   var hue_tgt = tgt_color_adjust[0];
+   var hue_tgt = tgt_color_adjust(0);
    var hue_settgt = hue_i("target_color");
    var saturation_settgt = mult_color_adjust("target_color",1);
    var brightness_settgt = mult_color_adjust("target_color",2);
@@ -282,14 +356,36 @@ var CFA = (function() {
    var skew = function(ydeg,xdeg) {
       yrad = Math.PI * ydeg / 180.0;
       xrad = Math.PI * xdeg / 180.0;
-      return tx( [math.cos(xrad),math.sin(xrad),math.sin(yrad),math.cos(yrad),0,0] );
+      var new_x_x = Math.cos(xrad);
+      var new_x_y = Math.sin(xrad);
+      var new_y_x = -Math.sin(yrad);
+      var new_y_y = Math.cos(yrad);
+      return tx( [new_x_x,new_x_y,new_y_x,new_y_y,0,0]);
    };
    var rot = function(deg) {
       var rad = Math.PI * deg / 180.0;
-      var yv = Math.sin(rad);
       var xv = Math.cos(rad);
+      var yv = Math.sin(rad);
       return tx([xv,yv,-yv,xv,0,0]);
    };
+   var flip = function(deg) {
+      var rad = Math.PI * deg / 180.0;
+      var yv = Math.sin(rad);
+      var xv = Math.cos(rad);
+      var rotmat = [xv,yv,-yv,xv,0,0];
+      var mat = mat_x_mat([-1,0,0,1,0,0],rotmat);
+      return tx(mat);
+   }
+
+
+   var compile_adjustment = function(adjs) {
+      // TODO: pull out all the transformations into just one.
+      return function(state) {
+	 for (var i = 0; i < adjs.length; i++) {
+	    adjs[i](state);
+	 }
+      }
+   }
 
    var reorder = function(adjs) {
       // Order by: translation, then rotation, then scaling, then skews, 
@@ -314,19 +410,47 @@ var CFA = (function() {
 
    var idgen = 0;
 
-   var seq_csp = function(fns) {
-      var fin = function(st, cc) { return cc(); };
-      var cur = fin;
-      for (var i = fns.length - 1; i >= 0; i--) {
-	 var ff = fns[i];
-	 var ncur = (function(rcur) { 
-	    return function(st,cc) {
-	       ff(st, function() { rcur(st,cc); });
-	    };
-	 })(cur);
-	 cur = ncur;
-      }
-      return cur;
+   var trans_color = function(c) {
+      // HSB is the same as HSV? but canvas knows HSL.
+      // http://ariya.blogspot.com/2008/07/converting-between-hsl-and-hsv.html
+      var insat = c[1];
+      var inval = c[2];
+
+      var h = c[0]; // hue stays the same.
+
+      var l = (2 - insat) * inval;
+      var s = insat * inval;
+      /*if (l <= 1)
+	 s = s / l;
+      else 
+	 if (l < 1.9)
+	    s = s / (2 - l);
+      */
+      l = l / 2;
+
+
+      var a = c[3];
+      var result = "hsla(" + h + "," + (s * 100) + "%," + (l * 100) + "%," + a + ")"
+
+      return result;
+   }
+   var builtin_circle = function(state, cc) {
+      var c = state.cfa.canvas;
+      c.fillStyle= trans_color(state.color);
+      c.setTransform.apply(c,state.transform);
+      c.beginPath();
+      c.arc(0,0,0.5,0, Math.PI*2,true);
+      c.closePath();
+      c.fill();
+      return cc;
+   }
+   
+   var builtin_square = function(state,cc) {
+      var c = state.cfa.canvas;
+      c.fillStyle= trans_color(state.color);
+      c.setTransform.apply(c,state.transform);
+      c.fillRect(-0.5,-0.5,1,1);
+      return cc;
    }
 
 
@@ -342,36 +466,63 @@ var CFA = (function() {
 	  seq([lit('x'),number], function(_,x) { return translate(x,0.0); }),
 	  seq([lit('y'), number], function(_,y) { return translate(0.0,y); }),
 	  seq([lit('z'), number], function(_,y) { return translate(0.0,0.0); }),
-	  seq([lit('size'),number], function(_,s) { return scale(s,s); }),
-	  seq([lit('size'),number,number], 
+	  seq([alt(lit('size'),lit('s')),number], function(_,s) { return scale(s,s); }),
+	  seq([alt(lit('size'),lit('s')),number,number], 
 	      function(_,sx,sy) { return scale(sx,sy); }),
-	  seq([lit('size'),number,number,number], 
+	  seq([alt(lit('size'),lit('s')),number,number,number], 
 	      function(_,sx,sy,sz) { return scale(sx,sy); }),
-	  seq([lit('s'),number], function(_,s) { return scale(s,s); }),
-	  seq([lit('s'),number,number], 
-	      function(_,sx,sy) { return scale(sx,sy); }),
-	  seq([lit('s'),number,number,number], 
-	      function(_,sx,sy,sz) { return scale(sx,sy); }),
-	 seq([lit('rotate'),number],
-	     function(_,f) { return rotate(f); }),
-	 seq([lit('r'),number],
-	     function(_,f) { return rotate(f); }),
-	 seq([lit('flip'),number],
+	  seq([alt(lit('rotate'),lit('r')),number],
+	     function(_,f) { return rot(f); }),
+	  seq([alt(lit('flip'),lit('f')),number],
 	     function(_,f) { return flip(f); }),
-	 seq([lit('f'),number],
-	     function(_,f) { return flip(f); }),
-	 seq([lit('skew'),number, number], 
-	     function(a,b) { return skew(a,b); })
-	  // TODO: color adjustments.
+	  seq([lit('skew'),number, number], 
+	     function(_,a,b) { return skew(a,b); }),
+
+	  // Color adjustments.
+	  seq([alt(lit('hue'),lit('h')), number], 
+	      function(_,h) { return hue(h); }),
+	  seq([alt(lit('saturation'),lit('sat')), number], 
+	      function(_,v) { return saturation(v); }),
+	  seq([alt(lit('brightness'),lit('b')), number], 
+	      function(_,v) { return brightness(v); }),
+	  seq([alt(lit('alpha'),lit('a')), number], 
+	      function(_,v) { return alpha(v); }),
+
+	  // Adjust target color:
+	  seq([lit('\\|'),alt(lit('hue'),lit('h')), number], 
+	      function(_,_,h) { return hue_settgt(h); }),
+	  seq([lit('\\|'),alt(lit('saturation'),lit('sat')), number], 
+	      function(_,_,_v) { return saturation_settgt(v); }),
+	  seq([lit('\\|'),alt(lit('brightness'),lit('b')), number], 
+	      function(_,_,v) { return brightness_settgt(v); }),
+	  seq([lit('\\|'),alt(lit('alpha'),lit('a')), number], 
+	      function(_,_,v) { return alpha_settgt(v); }),
+
+	  // Move drawing color closer to target color:
+	  seq([alt(lit('hue'),lit('h')), number,lit('\\|')], 
+	      function(_,h,_) { return hue_tgt(h); }),
+	  seq([alt(lit('saturation'),lit('sat')), number, lit('\\|')], 
+	      function(_,v,_) { return saturation_tgt(v); }),
+	  seq([alt(lit('brightness'),lit('b')), number, lit('\\|')], 
+	      function(_,v,_) { return brightness_tgt(v); }),
+	  seq([alt(lit('alpha'),lit('a')), number,lit('\\|')], 
+	      function(_,v,_) { return alpha_tgt(v); })
+
 	  );
 	  
-      var adjustment = alt(seq([p(/(\[)/), many(adj), p(/(\])/)], function(_,adjs,_) {  return adjs; }),
-			   seq([p(/(\{)/), many(adj), p(/(\})/)], function(_,adjs,_) { return reorder(adjs); }));
+      var adjustment = alt(seq([p(/(\[)/), many(adj), p(/(\])/)], function(_,adjs,_) {  return compile_adjustment(adjs); }),
+			   seq([p(/(\{)/), many(adj), p(/(\})/)], function(_,adjs,_) { return compile_adjustment(reorder(adjs)); }));
 			   
 
       // Read a rule!
-      var statement = seq([ident, adjustment],
-			  function(nm,adj) { return apply_rule(nm,adj); })
+      var ntimes = seq([number,lit('\\*'),adjustment,ident,adjustment],
+		       function(count,_,adj1,nm,adj2) {
+			  return ntimes_apply(count, apply_rule(nm,adj2),adj1);
+		       });
+      
+      var statement = alt(seq([ident, adjustment],
+			  function(nm,adj) { return apply_rule(nm,adj); }),
+			  ntimes);
       var rbody = seq([p(/(\{)/),some(statement), p(/(\})/)],
 		      function(_,b,_) { return b; });
 
@@ -391,22 +542,106 @@ var CFA = (function() {
 			      function(_,nm) { return include(nm); }),
 			  seq([lit("tile"), adjustment], 
 			      function(_,adj) { return tile(adj); }),
-			  p_rule
+			  p_rule,
+			  seq([lit("background"),adjustment],
+			      function(_,adj) { return bkgd(adj); })
 			  );
 
+      
 
-      return seq([many(directive), end_of_input], function(r,_) { return r; })(str);
+      // Actually run the parse:
+      var result = 
+      seq([many(directive),end_of_input], function(r,_) { return r;})(str);
+      
+      var ncfa = {
+	 rules : {},
+	 start_rule : "",
+	 compiled_rules : {
+	     'CIRCLE' : builtin_circle,
+	    'SQUARE' : builtin_square
+	 },
+	 background : [0,0,1,1],
+	 paths : {},
+      };
+      
+      var res_p = result[0][0];
+      for (var i = 0; i < res_p.length; i++) {
+	 res_p[i](ncfa);
+      }
+      return ncfa;
    };
 
+   var default_opts = {
+      recurse : function(f,state,cc) {
+	 var t = state.transform
+	 var xlen_sq = t[0] * t[0] + t[1]*t[1];
+	 var ylen_sq = t[2] * t[2] + t[3]*t[3];
+	 if (xlen_sq < 0.5 | ylen_sq < 0.5) { 
+	    // when we're smaller than 1/2 pixel, give up.
+	    return cc;
+	 }
+	 if (state.depth > 10000) {
+	    return cc;
+	 } else
+	 return function() { return f(state,cc) };
+      },
+      cont : function(cc) {
+	 return cc; // Note the missing call parens! trampolined style.
+      }
+   };
    
-   
-   
+   var call_trampoline = function(f) {
+      var cur = f;
+      var count = 0;
+      while (typeof(cur) == 'function') {
+	 cur = cur();
+	 count = count + 1;
+	 if (count > 1000) { // 1ms pause every 1000 bounces.
+	    window.setTimeout(function() {
+	       call_trampoline(cur);
+	    }, 1);
+	    return;
+	 }
+      }
+      return cur;
+   }
+
    return {
       parse : function(taid) {
 	 var ta = document.getElementById(taid);
 	 var v = (ta.value);
-	 console.log(parse_cva(v));
-      }
+	 var r = (parse_cva(v));
+	 return r;
+      },
+      exec : function(cfa, w,h,canvas_id, exec_opts) {
+	 if (!exec_opts)
+	    exec_opts = default_opts;
+
+	 cfa.recurse = exec_opts.recurse;
+	 cfa.cont = exec_opts.cont;
+
+	 var canvas = document.getElementById(canvas_id);
+	 
+	 cfa.canvas = canvas.getContext('2d');
+	 cfa.canvas.setTransform(1,0,0,1,0,0);
+	 cfa.canvas.fillStyle = trans_color(cfa.background);
+	 cfa.canvas.fillRect(0,0,w,h);
+
+	 var initial_adj = compile_adjustment([scale(0.5,0.5)]);
+	 
+	 var initial_state = {
+	    color : [0,0,0,1],
+	    target_color : [0,0,0,1],
+	    transform : [w/2.0,0,0,-1.0 * h/2.0,w/2.0,h/2.0],
+	    cfa : cfa,
+	    depth : 0
+	 };
+	 
+	 var fin_cc = function() { console.log("done"); }
+	 var go = apply_rule(cfa.startshape, initial_adj);
+	 call_trampoline(function() { return go(initial_state, fin_cc); });
+      },
+      default_opts : default_opts
    }
 
 })();
