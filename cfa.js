@@ -724,10 +724,10 @@ var CFA = (function() {
       cfa.compiled_rules = old_builtins;
       
       // grow by last delta?
-      stats.bbox[0] += -1 * stats.delta[0];
+      /* stats.bbox[0] += -1 * stats.delta[0];
       stats.bbox[1] += -1 * stats.delta[1];
       stats.bbox[2] += stats.delta[2];
-      stats.bbox[3] += stats.delta[3];
+      stats.bbox[3] += stats.delta[3]; */
       return stats.bbox;
    };
 
@@ -738,7 +738,8 @@ var CFA = (function() {
 	 var r = (parse_cva(v));
 	 return r;
       },
-      exec : function(cfa, w,h,canvas_id, exec_opts) {
+      get_bbox : function(cfa) { return get_scale(cfa); },
+      exec : function(cfa, w,h,bbox,canvas_id, exec_opts) {
 	 if (!exec_opts) { exec_opts = default_opts; }
 
 
@@ -750,15 +751,18 @@ var CFA = (function() {
 	 cfa.canvas.clearRect(0,0,w,h);
 	 cfa.canvas.fillRect(0,0,w,h);
 
-	 // TODO: Determine bounding box by sampling the shape:
-	 var bbox = get_scale(cfa);
-	 /*
-	 var w = bbox[2] - bbox[0];
-	 var h = bbox[3] - bbox[1];
-	 var x = bbox[0];
-	 var y = bbox[1];  */
-	 console.log("BBOX",bbox);  
-	 var initial_adj = compile_adjustment([scale(0.01,0.01)]);
+	 var bw = bbox[2] - bbox[0];
+	 var bh = bbox[3] - bbox[1];
+	 var bx = bbox[0];
+	 var by = bbox[1]; 
+	 var buffer = 0.2 * bw; // 20% buffer
+	 bw += 2*buffer;
+	 bx -= buffer;
+	 bh += 2*buffer;
+	 by -= buffer;
+	 var scl = 1.0 / Math.min(bw,bh);
+	 console.log("bbox",bbox, scl);
+	 var initial_adj = compile_adjustment([scale(scl,scl),translate(-bx,-by)]);
 	 
 	 cfa.compiled_rules = builtins;
 	 cfa.recurse = exec_opts.recurse;
@@ -767,7 +771,7 @@ var CFA = (function() {
 	 var initial_state = {
 	    color : [0,0,0,1],
 	    target_color : [0,0,0,1],
-	    transform : [w/2.0,0,0,-1.0 * h/2.0,w/2.0,h/2.0],
+	    transform : [w,0,0,-1.0 * h,0.0,h],
 	    cfa : cfa,
 	    depth : 0
 	 };
@@ -776,7 +780,13 @@ var CFA = (function() {
 	 var go = apply_rule(cfa.startshape, initial_adj);
 	 call_trampoline(function() { return go(initial_state, fin_cc); });
       },
-      default_opts : default_opts
-   }
+      default_opts : default_opts,
+      parse_and_run : function(taid,w,h,canvas) {
+	 var cfa = this.parse(taid);
+	 var bbox = this.get_bbox(cfa);
+	 var ncfa = this.parse(taid); // FIXME: reusing it should work but doesn't.
+	 return this.exec(ncfa, w,h,bbox,canvas);
+      }
+   };
 
 })();
