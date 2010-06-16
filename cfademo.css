@@ -1,5 +1,6 @@
 body { 
-   width : 70% ;
+   font-family: 'Cardo',serif ;
+   width : 700px ;
    margin-left : auto ;
    margin-right : auto;
    background-color : #333 ;
@@ -21,6 +22,7 @@ a { color : #faa ;
 
 .demo { 
    display : block ; 
+   position : relative ; 
    width : 100% ;
    margin-left : auto ; 
    margin-right:auto;
@@ -70,7 +72,6 @@ li#load_dd:hover ul li {
 
 #editor textarea { 
    width : 500px ;
-   font-size : 70% ;
    margin-left : auto ;
    margin-right : auto ;
  }
@@ -78,8 +79,15 @@ li#load_dd:hover ul li {
 #editor { display : none ;  }
 
 #canvas { 
-   width : 90% ;
-   display : block ; margin-left : auto ; margin-right : auto ;
+   display : block ; 
+   clear : both ;
+   margin-left : auto ; margin-right : auto ;
    border : 1px solid #999; 
    margin-bottom : 1em ;
+}
+
+.script {  display:none; }
+
+.code { 
+   white-space: pre;
 }

@@ -1,9 +1,9 @@
-<?xml version="1.0"?>
 <!DOCTYPE html>
 
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
   <head>
     <title>CFA.js</title>
+    <link href="http://fonts.googleapis.com/css?family=Cardo:regular" rel="stylesheet" type="text/css"></link>
       <script src="cfa.js" type="text/javascript"></script>
       <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
       <script src="cfademo.js" type="text/javascript"></script>
@@ -13,12 +13,12 @@
   <body>
     <h1>CFA.js</h1>
     <p>
-      A javascript+canvas implementation of the <a href="http://contextfreeart.org">Context Free Art</a> design grammar: Put short code in, get pretty pictures out! <a href="#uth">How it works</a>.
+      A javascript+canvas implementation of the <a href="http://contextfreeart.org">Context Free Art</a> design grammar: Put short code in, get pretty pictures out! <a href="#tut">How to use it</a>. <a href="#uth">How it works</a>. <a href="#status">Implementation status</a>.
     </p>
     <div class="disclaimer">
       <h2>Reinventing the wheel.</h2>
       <p>Turns out, I'm not the first one to do this. Thankfully, I'm in good company. Check out <a href="http://azarask.in/projects/algorithm-ink/">Algorithm Ink</a> by <a href="http://www.azarask.in/">Aza Raskin</a>, who happens to be the lead designer for Firefox.</p>
-      <p>There are some definite differences between our implementations. </p>
+      <p>There are some definite <a href="#status_ink">differences</a> between our implementations. </p>
     </div>
     
     <div class="demo">
@@ -32,8 +32,10 @@
       </ul>
       <div class="editor" id="editor">
 	<div>
-	<textarea id="cfa_script" cols='20' rows='20' style='width:500px;'></textarea>
-	<div class="ctrl"><input type="text" id="bbox"></input></div>
+	  <form action="javascript:void(0);" method="get">
+	    <textarea id="cfa_script" cols='20' rows='20' style='width:500px;'></textarea>
+	    <div class="ctrl"><input type="text" id="bbox"></input></div>
+	  </form>
 	</div>
       </div>
       <canvas id="canvas" width='500' height='500' >
@@ -45,6 +47,46 @@
     </div>
 
     <div class="narrative">
+      <a name="tut"></a>
+      <h2>How to use it</h2>
+      <p>
+	In a nutshell, you write a short script describing the scene
+	you'd like, and you get a picture of the scene back. The
+	tricky part is that the scripts can be incredibly powerful and
+	thus unintuitive.
+      </p>
+      <p>Thankfully, there is ample tutorial countent:</p>
+      <ul>
+	<li>Aza Raskin has a <a href="http://www.azarask.in/blog/post/contextfreejs-algorithm-ink-making-art-with-javascript/">great blog post</a>, with a screencast, describing the basics using Algorithm Ink -- the scene description language is the same for both!</li>
+	<li><a href="http://contextfreeart.org">contextfreeart.org</a> has a handy reference sheet, as well as a gallery and some tutorials! <em>Note</em>: Some of the gallery examples won't work yet; see the <a href="#status">status</a>. </li>
+      </ul>
+      <a name="status"></a>
+      <h2>Implementation status</h2>
+      <h3>In general</h3>
+      <ul>
+	<li>Missing error handling, especially for parsing errors</li>
+	<li>Could use some profiling/optimization</li>
+	<li>I'm thinking of adding an option for breadth-first, rather than depth-first, drawing.</li>
+	<li>You shouldn't have to set the bounding box manually</li>
+	<li>There are definitely some bugs; for example, I don't think shear is working quite right.</li>
+      </ul>
+      <h3>Vs. contextfreeart.org</h3>
+      <ul>
+	<li>Not implemented yet: complex repetition.</li>
+	<li>Not implemented yet: expressions in adjustment values.</li>
+	<li>Not planned to implement: z-ordering.</li>
+	<li>Difference: Much slower.</li>
+	<li>Difference: But, you get to watch it draw!</li>
+	<li>Difference: You have to supply the drawing bounding box.</li>
+      </ul>
+      <h3><a name="status_ink"></a>Vs. Algorithm Ink</h3>
+      <ul>
+	<li>Fuller support for the CDFG grammar (e.g. comments, repetition)</li>
+	<li>Much uglier code (this is a weekend throwaway)</li>
+	<li>No support yet for interaction/events</li>
+	<li>No backend for saving things into a shared gallery</li>
+      </ul>
+
       <a name="uth"></a>
       <h2>Under the hood</h2>
       <p>
@@ -70,11 +112,8 @@
 	me specify the end grammar rather nicely once the plubming is
 	out of the way:
       </p>
-      <p class="code"><![CDATA[
-        var p_rule = seq([lit("rule"), ident, alt(number, succeed(1.0)) ,rbody],
- 		       function(_,nm,wt,bdy) { return rule(nm,wt,bdy); });
-
-      ]]></p>
+      <p class="code">var p_rule = seq([lit("rule"), ident, alt(number, succeed(1.0)) ,rbody],
+     function(_,nm,wt,bdy) { return rule(nm,wt,bdy); });</p>
       <p>
 	Translated to english, this means that a rule definition
 	consists of: The literal string "rule", then an identifier,
@@ -136,26 +175,26 @@
       </p>
       <p>
 	However, instead of invoking the callback, it <em>returns</em>
-	the callback, without invoking it.
+	the callback, without running it.
       </p>
       <p>
-	This turns our functions from ones that recurse to arbitrary
-	depths into ones that do their work, then return the next
-	thing to be done to the caller. The caller's logic is simple:
-	it repeatedly calls the continuation, getting a new one in
-	return, until the program is finished. It's a neat trick:
-	recursive calls in the tail position (calls that are the last
-	ones a function makes) no longer increase the stack depth --
-	and due to the use of CPS, <em>all</em> function calls are in
-	the tail position.
+	This transforms our functions from ones that recurse to
+	arbitrary depths into ones that return the 'next action' (the
+	continutation) to its caller. The root caller's logic is
+	simple: it repeatedly calls the continuation, getting a new
+	one in return, until the program is finished. It's a neat
+	trick: recursive calls in the tail position (calls that are
+	the last ones a function makes) no longer increase the stack
+	depth -- and due to the use of CPS, <em>all</em> function
+	calls are in the tail position.
       </p>
     </div>
 
     <div class="scripts">
       <div class="script" id="auto-start">
 	<div class="name">Seasons</div>
-	<div class="bbox">-70,-10,70,110</div>
-	<div class="code"><![CDATA[
+	<div class="bbox">-70,-30,70,50</div>
+	<div class="code">
 /* 
  * Seasons, by michael @ contextfreeart.org:
  * http://www.contextfreeart.org/gallery/view.php?id=519 
@@ -262,7 +301,7 @@ rule BARK 3 {
     CIRCLE {a -.6 s 2}
     CIRCLE {a -.6 s 1.5 b .3 z .1 x .3}
 }
-      ]]></div>
+      </div>
       </div>
       
 
@@ -271,7 +310,7 @@ rule BARK 3 {
     <div class='script'>
       <div class='name'>Tree</div>
       <div class='bbox'>-15,-1,15,15</div>
-      <div class='code'><![CDATA[
+      <div class='code'>
 /*
  * Tree by ColorMeImpressed @ contextfreeart.org
  * http://www.contextfreeart.org/gallery/view.php?id=2180
@@ -304,12 +343,12 @@ rule box 3 {
     box [s .8 r 10 y .8 b .015 z -.015]
     box [s .8 flip 90 r 10 y .8 b .015 z -.015]
 }
-      ]]></div>
+     </div>
     </div>
     <div class='script'>
       <div class='name'>Hilbert</div>
       <div class='bbox'>-1.1,-1.1,1.1,1.1</div>
-      <div class='code'><![CDATA[
+      <div class='code'>
 /* 
  * Hilbert by mfm24 @ contextfreeart.org
  * http://www.contextfreeart.org/gallery/view.php?id=1112
@@ -341,14 +380,17 @@ rule line
 {
     SQUARE{s 1 .01}
 }
-      ]]></div>
+     </div>
     </div>
     
     <div class='script'>
       <div class='name'>Morse code forever</div>
       <div class='bbox'>-2,-2,2,2</div>
-      <div class='code'><![CDATA[
-      startshape frame
+      <div class='code'>
+/*
+ * Morse Code Forever, by Matt @ algorithmink
+ */
+startshape frame
 
 rule frame {
   shape {s .07 y -2}
@@ -371,7 +413,68 @@ rule dit {
 rule dit .7 {
  shape {x 1}
 }
-      ]]></div>
+      </div>
     </div>
+
+    <div class='script'>
+      <div class='name'>SpiralThing</div>
+      <div class='bbox'>-2,-2,2,2</div>
+      <div class='code'>
+startshape shape
+
+rule shape{
+test { s .05 }
+test { s .05 flip 90 }
+test { s .05 r 180 }
+test { s .05 r 180 flip 90 }
+}
+
+rule test 10 {
+SQUARE{}
+test{ y .5 s .99 r 2 }
+}
+
+rule test .06 {
+SQUARE{}
+test { y .5 s .99 r 2 }
+test { y .5 s .99 r 10 flip 90 }
+}
+
+      </div>
+    </div>
+
+    <div class="script">
+      <div class='name'>Chalk</div>
+      <div class='bbox'>-3,-3,10,10</div>
+      <div class='code'>
+
+/*
+ * Chalk, by chris @ contextfreeart.org
+ * http://www.contextfreeart.org/gallery/view.php?id=256
+ */
+
+startshape blah
+background {hue 120 sat 1 b -0.5}
+ 
+rule blah {
+ blah2 {alpha -1}
+ blah2 {flip 90 alpha -1 x 5 b 1}
+ blah2 {alpha -1 y -5 b 1}
+ blah2 {flip 90 alpha -1 x 5 y -5}
+}
+ 
+rule blah2 {
+ SQUARE { }
+ blah2 {alpha 0.0001 r 10 x 1 s 0.9995}
+}
+ 
+rule blah2 {
+ SQUARE { }
+ blah2 {alpha 0.0001 r 9 x 1 s 0.9995}
+}
+ 
+      </div>
+    </div>
+
   </body>
 </html>

@@ -9,8 +9,8 @@ $(document.body).ready(function() {
    }
 
    // Keep canvas square:
-   var sz = function() {
-      var w = $('.demo').width();
+   /*var sz = function() {
+      var w = $('#canvas_holder').width();
       var w_adj = 0.8 * w;
       $("#canvas").attr('height',w);
       $("#canvas").attr('width',w);
@@ -18,7 +18,7 @@ $(document.body).ready(function() {
       $("#canvas")[0].height = w;
    };
    $(".demo").resize(sz);
-   sz();
+   sz();*/
 
    // Functions for starting and stopping a script:
    var is_running = false;
@@ -35,10 +35,15 @@ $(document.body).ready(function() {
       if (is_running) {
 	 stop() ;
       }
+      $("#cfa_script").blur(); // force value update?
+      $("#bbox").blur();
       var bbox = $("#bbox").val().split(",");
       for (var i = 0; i < bbox.length; i++) {
 	 bbox[i] = parseFloat(bbox[i]);
       }
+      
+      console.log($("#cfa_script").val());
+
       var cfa = CFA.parse('cfa_script');
       is_running = true;
       halt_fn = CFA.exec(cfa, bbox, 'canvas');
