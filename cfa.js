@@ -492,12 +492,11 @@ var CFA = (function() {
       return cc;
    };
 
-   var builtins = {
+   var builtins = function() { return {
 	 'CIRCLE' : builtin_circle,
 	 'SQUARE' : builtin_square,
-	 'TRIANGLE' : builtin_triangle
+	 'TRIANGLE' : builtin_triangle };
    };
-
    var ident = p(/([a-zA-Z0-9]+)/);
    var fname = p(/"?([a-zA-Z0-9.]+)"?/);
    var number = app(p(/([\-+]?[0-9]*\.?[0-9]+)/), parseFloat);
@@ -595,7 +594,7 @@ var CFA = (function() {
       var ncfa = {
 	 rules : {},
 	 start_rule : "",
-	 compiled_rules : builtins,
+	 compiled_rules : builtins(),
 	 background : [0,0,1,1],
 	 paths : {}
       };
@@ -758,7 +757,6 @@ var CFA = (function() {
 	 var w = canvas.width;
 	 var h = canvas.height; 
 	 
-	 console.log('w,h',w,h);
 
 	 cfa.canvas = canvas.getContext('2d');
 	 cfa.canvas.setTransform(1,0,0,1,0,0);
@@ -774,7 +772,6 @@ var CFA = (function() {
 	 console.log("bbox",bbox, scl);
 	 var initial_adj = compile_adjustment([scale(scl,scl),translate(-bx,-by)]);
 	 
-	 cfa.compiled_rules = builtins;
 	 cfa.recurse = exec_opts.recurse;
 	 cfa.cont = exec_opts.cont;
 
