@@ -1,0 +1,85 @@
+body { 
+   width : 70% ;
+   margin-left : auto ;
+   margin-right : auto;
+   background-color : #333 ;
+   color : #eee ;
+}
+
+div.disclaimer { 
+   font-size : 70% ;
+   color : #ccc ;
+   width : 70% ;
+   margin-left : auto ;
+   margin-right : auto ;
+}
+
+a { color : #faa ;
+   text-decoration : none ;
+   border : 1px dotted #555 ;
+}
+
+.demo { 
+   display : block ; 
+   width : 100% ;
+   margin-left : auto ; 
+   margin-right:auto;
+   background-color : #000;
+   border : 1px dotted #ccf ;
+}
+
+a:hover { border: 1px dotted #999; }
+a:visited { color:#ccf; }
+
+ul.controls { 
+   list-style : none ;
+   margin-left : auto ;
+   margin-right : auto ; 
+   padding : 0 ;
+   width : 100% ;
+   display : block ;
+ }
+
+ul.controls li { margin-left : 1em ; margin-bottom : 1em }
+
+ul.controls > li { float : left ; }
+ul.controls > li.fin {  float : right  }
+
+ul.controls a { background-color : #333 ;  }
+
+li#load_dd ul { display : none }
+
+li#load_dd:hover ul {
+   padding : 0 ;
+   margin : 0 ;
+   display : block ;
+   position : absolute ; 
+   list-style : none ; 
+}
+li#load_dd:hover ul li { 
+   margin : 0;
+   width : 100% ;
+   display : block ;
+}
+
+#editor div { 
+   display : block ;
+   width : 100% ;
+   padding : 3em ;
+}
+
+#editor textarea { 
+   width : 500px ;
+   font-size : 70% ;
+   margin-left : auto ;
+   margin-right : auto ;
+ }
+
+#editor { display : none ;  }
+
+#canvas { 
+   width : 90% ;
+   display : block ; margin-left : auto ; margin-right : auto ;
+   border : 1px solid #999; 
+   margin-bottom : 1em ;
+}

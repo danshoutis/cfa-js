@@ -1,6 +1,10 @@
-/* Context-free art ----> js+canvas compiler/interpreter. */
+/* Context-free art ----> js+canvas interpreter. */
 
 var CFA = (function() {
+   var console_a = { log : function() { } };
+   if (typeof(console) == 'undefined') {
+      console = console_a;
+   }
    // --------- Preliminaries: Math. ------------
    var vect_x_mat = function(v,m) {
       return [v[0] * m[0] + v[1] * m[2] + m[4],
@@ -42,7 +46,6 @@ var CFA = (function() {
 	    else { return str.substr(i); }
 	 }
       }
-
    };
 
    // Simple combinator parsers. Not particularly efficient.
@@ -568,13 +571,8 @@ var CFA = (function() {
 		      function(_,b,_) { return b; });
 
 
-      var p_rule = 
-      //alt(
-	  seq([lit("rule"), ident, alt(number, succeed(1.0)) ,rbody],
-	      function(_,nm,wt,bdy) { return rule(nm,wt,bdy); });
-	  //seq([lit("rule"), ident, number, rbody],
-	  //    function(_,nm,weight,body) { return rule(nm,weight,body); })
-	 //);
+      var p_rule = seq([lit("rule"), ident, alt(number, succeed(1.0)) ,rbody],
+		       function(_,nm,wt,bdy) { return rule(nm,wt,bdy); });
 
       // directives
       var directive = alt(seq([lit("startshape"), ident], 
@@ -614,11 +612,11 @@ var CFA = (function() {
 	 var t = state.transform;
 	 var xlen_sq = t[0] * t[0] + t[1]*t[1];
 	 var ylen_sq = t[2] * t[2] + t[3]*t[3];
-	 if (xlen_sq < 0.05 && ylen_sq < 0.05) { 
+	 if (xlen_sq < 0.5 && ylen_sq < 0.5) { 
 	    // when small, call it done.
 	    return cc;
 	 }
-	 if (state.depth > 10000) { return cc; }
+	 if (state.depth > 100000) { return cc; }
 	 else { return function() { return f(state,cc); }; }
       },
       cont : function(cc) {
@@ -653,7 +651,7 @@ var CFA = (function() {
 	 xlen_sq *= xlen_sq;
 	 var ylen_sq = Math.max(unitx[1],unity[1]);
 	 ylen_sq *= ylen_sq;
-	 if (xlen_sq < 0.005 | ylen_sq < 0.005) { return cc; }
+	 if (xlen_sq < 0.5 | ylen_sq < 0.5) { return cc; }
 	 if (state.depth > 100) { return cc; } // only 100 deep.
 
 	 return function() { return f(state,cc); };
@@ -661,19 +659,32 @@ var CFA = (function() {
    };
 
    var call_trampoline = function(f) {
-      var cur = f;
-      var count = 0;
-      while (typeof(cur) == 'function') {
-	 cur = cur();
-	 count = count + 1;
-	 if (count > 1000) { // 1ms pause every 1000 bounces.
-	    window.setTimeout(function() {
-	       call_trampoline(cur);
-	    }, 1);
-	    return;
+      var halted = false;
+      var call_imp = function(ff) {
+	 var cur = ff;
+	 var count = 0;
+	 while (typeof(cur) == 'function') {
+	    cur = cur();
+	    if (halted) {
+	       return;
+	    }
+	    count = count + 1;
+	    if (count > 1000) { // 1ms pause every 1000 bounces.
+	       window.setTimeout(function() {
+		  call_imp(cur);
+	       }, 10);
+	       return;
+	    }
 	 }
-      }
-      return cur;
+	 return cur;
+      };
+      window.setTimeout(function() {
+	 call_imp(f);
+      }, 10);
+      return function() { 
+	 console.log("stopped.");
+	 halted = true;
+      };
    };
 
    var get_scale = function(cfa) {
@@ -739,12 +750,16 @@ var CFA = (function() {
 	 return r;
       },
       get_bbox : function(cfa) { return get_scale(cfa); },
-      exec : function(cfa, w,h,bbox,canvas_id, exec_opts) {
+      exec : function(cfa, bbox,canvas_id, exec_opts) {
 	 if (!exec_opts) { exec_opts = default_opts; }
 
 
 	 var canvas = document.getElementById(canvas_id);
+	 var w = canvas.width;
+	 var h = canvas.height; 
 	 
+	 console.log('w,h',w,h);
+
 	 cfa.canvas = canvas.getContext('2d');
 	 cfa.canvas.setTransform(1,0,0,1,0,0);
 	 cfa.canvas.fillStyle = trans_color(cfa.background);
@@ -754,13 +769,8 @@ var CFA = (function() {
 	 var bw = bbox[2] - bbox[0];
 	 var bh = bbox[3] - bbox[1];
 	 var bx = bbox[0];
-	 var by = bbox[1]; 
-	 var buffer = 0.2 * bw; // 20% buffer
-	 bw += 2*buffer;
-	 bx -= buffer;
-	 bh += 2*buffer;
-	 by -= buffer;
-	 var scl = 1.0 / Math.min(bw,bh);
+	 var by = bbox[1];
+	 var scl = 1.0 / Math.max(bw,bh);
 	 console.log("bbox",bbox, scl);
 	 var initial_adj = compile_adjustment([scale(scl,scl),translate(-bx,-by)]);
 	 
@@ -778,7 +788,7 @@ var CFA = (function() {
 	 
 	 var fin_cc = function() { console.log("done"); };
 	 var go = apply_rule(cfa.startshape, initial_adj);
-	 call_trampoline(function() { return go(initial_state, fin_cc); });
+	 return call_trampoline(function() { return go(initial_state, fin_cc); });
       },
       default_opts : default_opts,
       parse_and_run : function(taid,w,h,canvas) {

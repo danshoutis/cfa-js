@@ -1,0 +1,377 @@
+<?xml version="1.0"?>
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>CFA.js</title>
+      <script src="cfa.js" type="text/javascript"></script>
+      <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+      <script src="cfademo.js" type="text/javascript"></script>
+
+      <link href="cfademo.css" rel="stylesheet" type="text/css"></link>      
+  </head>
+  <body>
+    <h1>CFA.js</h1>
+    <p>
+      A javascript+canvas implementation of the <a href="http://contextfreeart.org">Context Free Art</a> design grammar: Put short code in, get pretty pictures out! <a href="#uth">How it works</a>.
+    </p>
+    <div class="disclaimer">
+      <h2>Reinventing the wheel.</h2>
+      <p>Turns out, I'm not the first one to do this. Thankfully, I'm in good company. Check out <a href="http://azarask.in/projects/algorithm-ink/">Algorithm Ink</a> by <a href="http://www.azarask.in/">Aza Raskin</a>, who happens to be the lead designer for Firefox.</p>
+      <p>There are some definite differences between our implementations. </p>
+    </div>
+    
+    <div class="demo">
+      <ul class="controls">
+	<li><a href="javascript:void(0);" id="b_run">Run</a></li>
+	<li><a href="javascript:void(0);" id="b_stop">Stop</a></li>
+	<li id="load_dd">Load premade:
+	  <ul class="scripts" id="premade"></ul>
+	</li>
+	<li class="fin"><a href="javascript:void(0);" id="b_edit">Edit</a></li>
+      </ul>
+      <div class="editor" id="editor">
+	<div>
+	<textarea id="cfa_script" cols='20' rows='20' style='width:500px;'></textarea>
+	<div class="ctrl"><input type="text" id="bbox"></input></div>
+	</div>
+      </div>
+      <canvas id="canvas" width='500' height='500' >
+	<div class="fallback">
+	  Sorry, you need a browser that supports the HTML5 canvas for
+	  this.
+	</div>
+      </canvas>
+    </div>
+
+    <div class="narrative">
+      <a name="uth"></a>
+      <h2>Under the hood</h2>
+      <p>
+	For those of you who looked at the source and saw that it was
+	underdocumented and overcomplicated: Sorry about that, it's a
+	hack. As I have time I'll fix it up.
+      </p>
+      <p>
+	If you're a functional programming afficiando, you'll see a
+	lot of friendly concepts below; if not, it will seem rather
+	alien and unfamiliar.
+      </p>
+      <h3>Parsing</h3>
+      <p>
+	I used a technique from the functional programming language
+	world called combinator parsing, where you build up a parser
+	by composing lots of little functions together. (A
+	"combinator" is, roughly, a function that combines other
+	functions into a new function.)
+      </p>
+      <p>
+	This means the code starts with some ugly plumbing, but lets
+	me specify the end grammar rather nicely once the plubming is
+	out of the way:
+      </p>
+      <p class="code"><![CDATA[
+        var p_rule = seq([lit("rule"), ident, alt(number, succeed(1.0)) ,rbody],
+ 		       function(_,nm,wt,bdy) { return rule(nm,wt,bdy); });
+
+      ]]></p>
+      <p>
+	Translated to english, this means that a rule definition
+	consists of: The literal string "rule", then an identifier,
+	then an optional number ('1.0' is the alternative, if the
+	number is omitted), then the body of the rule.
+      </p>
+      <h3>Interpreting and drawing</h3>
+      <h4>Graphics commands and state</h4>
+      <p>
+	To a certain extent, this is the easy part: Drawing things on
+	the canvas is reasonably straightforward, and ditto for
+	keeping track of the transformation and color states.
+      </p>
+      <h4>Long-running scripts, browser interaction</h4>
+      <p>
+	These issues are potentially nasty ones for a naive
+	implementation -- it can take a long time to render images,
+	and the browser tab or entire browser will be frozen during
+	that time. Further, the user will eventually be prompted to
+	kill the script because it will appear unresponsive. Finally,
+	as a matter of taste, the drawing process will be hidden --
+	it's far more fun to watch it progress, even at the expense of
+	some speed.
+      </p>
+      <p>
+	There's a big hammer for these sorts of issues called <a
+	href="http://en.wikipedia.org/wiki/Continuation-passing_style">continuation-passing
+	style</a>. If you've used AJAX, you've already done a little
+	bit of it: Rather than giving you the contents of your request
+	immediately as a return value, and potentially stalling your
+	scripts and the browser while it your request goes out over
+	the network, you instead provide a callback which receives the
+	AJAX results.
+      </p>
+      <p>
+	Continuation-passing style (CPS) is this idea applied universally:
+	You assume <em>all</em> functions work like an AJAX call: they
+	never return, instead invoking a callback when they're
+	done.
+      </p>
+      <p>
+	Yes, it's a headache. But look what you get in return: At any
+	point during execution, a setTimeout can be inserted, allowing
+	the browser to remain interactive, and execution will pick
+	right back up where it was before after the timeout!
+      </p>
+      <h4>Recursion limits</h4>
+      <p>
+	Since my implementation is fairly direct, where recursion in
+	the CDFG language translates into recursion in Javascript, it
+	will also run into recursion limits in the browser's
+	interpreter.
+      </p>
+      <p>
+	It turns out that we can solve this problem via a technique
+	called <a href="http://www.azarask.in/">trampolining</a>. Due
+	to our use of CPS, each function's last task is to invoke its
+	continuation (the callback provided in lieu of returning).
+      </p>
+      <p>
+	However, instead of invoking the callback, it <em>returns</em>
+	the callback, without invoking it.
+      </p>
+      <p>
+	This turns our functions from ones that recurse to arbitrary
+	depths into ones that do their work, then return the next
+	thing to be done to the caller. The caller's logic is simple:
+	it repeatedly calls the continuation, getting a new one in
+	return, until the program is finished. It's a neat trick:
+	recursive calls in the tail position (calls that are the last
+	ones a function makes) no longer increase the stack depth --
+	and due to the use of CPS, <em>all</em> function calls are in
+	the tail position.
+      </p>
+    </div>
+
+    <div class="scripts">
+      <div class="script" id="auto-start">
+	<div class="name">Seasons</div>
+	<div class="bbox">-70,-10,70,110</div>
+	<div class="code"><![CDATA[
+/* 
+ * Seasons, by michael @ contextfreeart.org:
+ * http://www.contextfreeart.org/gallery/view.php?id=519 
+ */
+background {b -.8 hue 230 sat .7 a-0.5}
+ 
+startshape SEASONS
+ 
+rule SEASONS {
+    SKY {y 2 b 1 hue 180 z -100 sat .1}
+    TRUNK {x 30 hue 30  alpha -.5 flip 90}
+    TRUNK {x -30 hue 90 alpha -.5}
+}
+ 
+rule SKY {
+    80* {y 1 hue .6 sat .01} SQUARE {s 100 1.3}
+}
+ 
+rule TRUNK 50 {
+    BARK {}
+    TRUNK {y .2 r .1}
+}
+rule TRUNK {
+    2* {flip 90} LIMB {r -12 s .9}
+}
+ 
+rule LIMB 50 {
+    BARK {}
+    LIMB {y .2 r .1}
+}
+rule LIMB {
+    2* {flip 90} BRANCH {r 8 s .9}
+}
+ 
+rule BRANCH 10 {
+    BARK {}
+    BRANCH {y .2 hue -2 r .1}
+}
+rule BRANCH 10 {
+    BARK {}
+    BRANCH {y .2 r .1 hue 2}
+}
+rule BRANCH 10 {
+    BARK {}
+    BRANCH {y .2 r .1 z 1}
+}
+rule BRANCH 10 {
+    BARK {}
+    BRANCH {y .2 r .1 z -1}
+}
+rule BRANCH {
+    2* {flip 90 hue 30} BOUGH {r 10 s .7}
+}
+ 
+rule BOUGH {
+    LEAVES {}
+    TWIG {z -1}	
+}
+ 
+rule TWIG 200 {
+    BARK {}
+    TWIG {y .2 r .1 s .999 a -.001}
+}
+rule TWIG {
+    TWIG {r 12 s .8}
+    TWIG {r -12 s .8 f 90}
+}
+rule TWIG {
+    TWIG {r 8 s .9}
+    TWIG {r -18 s .7 f 90}
+}
+rule TWIG {
+    TWIG {r 25 s .6}
+    TWIG {r -5 s .95 f 90}
+}
+ 
+rule LEAVES {
+    60* {r .2} LEAF {y 30 r -180 sat 1 b .6 s 4 hue -10}
+    100* {r .2} LEAF {y 50 r -180 sat 1 b .8 s 4 hue -10}
+    60* {r .2} LEAF {y 70 r -180 sat 1 b 1 s 4 hue 10}
+}
+ 
+rule LEAF 3 {
+    LEAF {x 1 hue 1 b -.05 z -1 s .99}
+}
+rule LEAF 4 {
+    LEAF {r 138 sat -.03 z 1}
+}
+rule LEAF {
+    SQUARE {skew 20 20 hue -10}
+    SQUARE {skew 30 30 sat .1}
+    SQUARE {skew 40 40 hue 10 sat .2}
+    SQUARE {skew 20 20 b -1 s 1.5 z -.1 alpha -.8}
+    SQUARE {skew 20 20 b -1 s 2.2 z -.1 alpha -.9}
+}
+ 
+rule BARK {
+    CIRCLE {a -.7 s 2}
+    CIRCLE {a -.7 s 1.5 b .3 z .1 x .3}
+    CIRCLE {a -.7 s 1 b .6 z .2 x .6}
+    CIRCLE {a -.7 s .5 b .9 z .3 x .9}
+}
+rule BARK 3 {
+    CIRCLE {a -.6 s 2}
+    CIRCLE {a -.6 s 1.5 b .3 z .1 x .3}
+}
+      ]]></div>
+      </div>
+      
+
+    </div>
+
+    <div class='script'>
+      <div class='name'>Tree</div>
+      <div class='bbox'>-15,-1,15,15</div>
+      <div class='code'><![CDATA[
+/*
+ * Tree by ColorMeImpressed @ contextfreeart.org
+ * http://www.contextfreeart.org/gallery/view.php?id=2180
+ */
+
+      startshape box
+ 
+rule box 20 {
+    SQUARE {}
+    box {s .99 r 3 y .8}
+}
+rule box 8 {
+    SQUARE {}
+    box {s .99 r 3 y .8 flip 90}
+}
+rule box {
+    SQUARE {}
+    box [s .5 r 10 y .8 b .07 z -.07]
+    box {s .99 y .8}
+    box [s .6 flip 90 r 10 y .8 b .07 z -.07]
+}
+rule box {
+    SQUARE {}
+    box [s .5 r 10 y .8 b .07 z -.07]
+    box {s .99 y .8 flip 90}
+    box [s .5 flip 90 r 10 y .8 b .07 z -.07]
+}
+rule box 3 {
+    SQUARE {}
+    box [s .8 r 10 y .8 b .015 z -.015]
+    box [s .8 flip 90 r 10 y .8 b .015 z -.015]
+}
+      ]]></div>
+    </div>
+    <div class='script'>
+      <div class='name'>Hilbert</div>
+      <div class='bbox'>-1.1,-1.1,1.1,1.1</div>
+      <div class='code'><![CDATA[
+/* 
+ * Hilbert by mfm24 @ contextfreeart.org
+ * http://www.contextfreeart.org/gallery/view.php?id=1112
+ */
+startshape H
+ 
+rule H
+{
+2* {flip 90}
+iline{r 90   x -.5}
+ 
+iline {y -.5}
+ 
+2*{flip 90}
+H {s .5 r 90 x -.5 y  .5}
+ 
+2*{flip 90}
+H {s .5      x -.5 y -.5}
+ 
+}
+ 
+rule iline
+{
+line { }
+iline { s .5 y .25}
+}
+ 
+rule line
+{
+    SQUARE{s 1 .01}
+}
+      ]]></div>
+    </div>
+    
+    <div class='script'>
+      <div class='name'>Morse code forever</div>
+      <div class='bbox'>-2,-2,2,2</div>
+      <div class='code'><![CDATA[
+      startshape frame
+
+rule frame {
+  shape {s .07 y -2}
+}
+
+rule shape{
+ dit {r 2 s .9997}
+}
+
+rule dit {
+ CIRCLE {x .5 s .8}
+ shape {x 1}
+}
+
+rule dit {
+ SQUARE {x 1 s 1.6 .8}
+ shape {x 2 r 2}
+}
+
+rule dit .7 {
+ shape {x 1}
+}
+      ]]></div>
+    </div>
+  </body>
+</html>
