@@ -8,37 +8,38 @@ var CFA = (function() {
    };
    
    var mat_x_mat = function(a,b) {
-      b_no_t = [b[0],b[1],b[2],b[3],0,0]; // b minus its translation
-      va = [a[0],a[1]];
-      vb = [a[2],a[3]];
-      vc = [a[4],a[5]];
+      var b_no_t = [b[0],b[1],b[2],b[3],0,0]; // b minus its translation
+      var va = [a[0],a[1]];
+      var vb = [a[2],a[3]];
+      var vc = [a[4],a[5]];
       
-      va_t = vect_x_mat(va, b_no_t);
-      vb_t = vect_x_mat(vb, b_no_t);
-      vc_t = vect_x_mat(vc, b); // include translation.
+      var va_t = vect_x_mat(va, b_no_t);
+      var vb_t = vect_x_mat(vb, b_no_t);
+      var vc_t = vect_x_mat(vc, b); // include translation.
       
       return [va_t[0],va_t[1],vb_t[0],vb_t[1],vc_t[0],vc_t[1]];
    };
 
    // -------- Preliminaries : Parsing framework. -----------------
    var chomp = function(str) {
-      if (str.length == 0)
+      if (str.length === 0) {
 	 return str;
+      }
       var i = 0;
       while (i < str.length) {
 	 if (/\s/m.test(str[i])) {
 	    i++;
 	 } else {
 	    if (str[i] == '/' && (i + 1 < str.length) && str[i+1] == "/") {
-	       while (i < str.length && str[i] != "\n") 
-		  i++;
+	       while (i < str.length && str[i] != "\n") { i++; }
 	    }
 	    else if (str[i] == "/" && (i + 1 < str.length) && str[i+1] == "*") {
-	       while (i < str.length && !(str[i] == '/' && str[i-1] == "*"))
+	       while (i < str.length && !(str[i] == '/' && str[i-1] == "*")) {
 		  i++;
+	       }
 	       i++; // one extra to go past the final slash
 	    }
-	    else return str.substr(i);
+	    else { return str.substr(i); }
 	 }
       }
 
@@ -49,11 +50,9 @@ var CFA = (function() {
       return (function(instr) {
 	 var str = chomp(instr);
 	 var m = rx.exec(str);
-	 if (null == m) 
-	    return [];
-	 if (m.index != 0) { // not at beginning.
-	    return [];
-	 }
+	 if (null === m) { return []; }
+	 if (m.index !== 0) { return []; } // not at beginning.
+
 	 return [[m[1], str.substr(m.index + m[0].length)]]; // return 1st paren group
       });
    };
@@ -88,17 +87,18 @@ var CFA = (function() {
 	 }
 
 	 return res_fin;
-      }
+      };
    };
 
    var app = function(parser, fn) { // apply a fn to the result of a parse
       return function(str) {
 	 var res = parser(str);
-	 for (var i = 0; i < res.length; i++)
+	 for (var i = 0; i < res.length; i++) {
 	    res[i][0] = fn(res[i][0]);
+	 }
 	 return res;
       };
-   }
+   };
 
    var succeed = function(v) {
       return function(str) {
@@ -123,10 +123,11 @@ var CFA = (function() {
 	 }
 
 	 return r;
-      }
+      };
+
       var app_i = function(r) {
 	 return fn.apply("_no_this", flatten_seq_res(r));
-      }
+      };
 
       return app(s, app_i);
    };
@@ -145,13 +146,13 @@ var CFA = (function() {
 
    var end_of_input = function(instr) {
       var str = chomp(instr);
-      if (typeof(str) == 'undefined' || str.length == 0) {
+      if (typeof(str) == 'undefined' || str.length === 0) {
 	 return [ [true, ""] ];
       }
-      else return [];
-   }
+      else { return []; }
+   };
 
-   var lit = function(x) { return p(new RegExp("(" + x + ")")); }
+   var lit = function(x) { return p(new RegExp("(" + x + ")")); };
 
    // ------ Context Free Art -----------
    
@@ -161,16 +162,13 @@ var CFA = (function() {
    };
    var rule = function(nm,prob,body) {
       return function(cfa) { 
-	 if (!!!cfa.rules[nm])
-	    cfa.rules[nm] = [];
+	 if (!!!cfa.rules[nm]) { cfa.rules[nm] = []; }
 	 cfa.rules[nm].push([prob,body]);
       };
    };
    var include = function(incpath) {
       return function(cfa) {
-	 if (!cfa.inc_warned)
-	    console.log("Warning: includes not supported.");
-	 cfa.inc_warned = true;
+	 console.log("Warning: includes not supported.");
       };
    };
    var tile = function(ignored) {
@@ -193,21 +191,20 @@ var CFA = (function() {
    };
 
 
-   // Sequence function of (state, cc) in continuation-passing style.
+   // Sequence functions of (state, cc) in continuation-passing style.
    // --
    var seq_cps = function(fns) {
-      if (fns.length == 0)
-	 return function(st,cc) { return cc(); }
-      if (fns.length == 1)
-	 return fns[0];
+      if (fns.length === 0) { return function(st,cc) { return cc(); }; }
+      if (fns.length == 1) { return fns[0]; }
+
       var hd = fns.shift();
       var tl = seq_cps(fns);
       return function(st,cc) {
 	 return hd(st, function() { return tl(st,cc); });
-      }
-   }
+      };
+   };
 
-   var compile_rule_body = function(bdy) { return seq_cps(bdy); }
+   var compile_rule_body = seq_cps; 
 
    var compile_rule = function(rule_bodies) {
       var splits = [];
@@ -220,24 +217,22 @@ var CFA = (function() {
       }
 
       var cur = 0.0;
-      for (var i = 0; i < splits.length; i++) {
-	 splits[i] = cur + ((1.0 / tot) * splits[i]);
-	 cur = splits[i];
+      for (var ii = 0; ii < splits.length; ii++) {
+	 splits[ii] = cur + ((1.0 / tot) * splits[ii]);
+	 cur = splits[ii];
       }
 
       return function(state,cc) {
-	 r = Math.random();
+	 var r = Math.random();
 	 for (var i = 0; i < rs.length; i++) {
-	    if (r < splits[i])
-	       return rs[i](state,cc);
+	    if (r < splits[i]) { return rs[i](state,cc); }
 	 }
 	 console.log("Badness in weighted random?");
 	 return rs[0](state,cc);
       };
-   }
+   };
 
-   // Apply a rule w/ given adjustments!
-   // ...Recursion happens here..
+
    var with_saved_state = function(callback, state, cc) {
       // Save the state:
       var depth = state.depth;
@@ -257,8 +252,10 @@ var CFA = (function() {
       };
 
       return callback(state,cont);
-   }
+   };
 
+   // Apply a rule w/ given adjustments!
+   // ...Recursion happens here..
    var apply_rule = function(nm, trans) {
       return function(state, cc) {
 	 
@@ -286,7 +283,7 @@ var CFA = (function() {
       if (0 >= count) { 
 	 return function(state,cc) {
 	    return state.cfa.cont(cc);
-	 }
+	 };
       }
 
       var hd = action;
@@ -295,8 +292,8 @@ var CFA = (function() {
       return function(state, cc) {
 	 adj(state);
 	 return hd(state, function() { return rest(state, cc); });
-      }
-   }
+      };
+   };
 
    // Color adjustments 
    // -----------------
@@ -313,15 +310,12 @@ var CFA = (function() {
       return function(v) {
 	 var adj = Math.abs(v);
 	 var tgt = 1.0;
-	 if (v < 0.0)
-	    tgt = 0.0;
+	 if (v < 0.0) { tgt = 0.0; }
 	 return function(state) {
 	    var diff = (tgt - state.color[component]);
 	    var fin = state[nm][component] + (adj * diff);
-	    if (fin < 0) 
-	       fin = 0
-	    if (fin > 1)
-	       fin = 1
+	    if (fin < 0) { fin = 0; }
+	    if (fin > 1) { fin = 1; }
 	    state[nm][component] = fin;
 	 };
       };
@@ -333,7 +327,10 @@ var CFA = (function() {
 	 return function(state) {
 	    var tgt = state.target_color[component];
 	    var diff = (tgt - state.color[component]);
-	    state.color[component] += (adj * diff);
+	    var fin = state.color[component] + (adj * diff);
+	    if (fin < 0) { fin = 0; }
+	    if (fin > 1) { fin = 1; }
+	    state.color[component] = fin;
 	 };
       };
    };
@@ -351,50 +348,64 @@ var CFA = (function() {
 
    // Shape adjustments
    // -----------------
-   var tx = function(mat) {
-      return function(state) {
+   var tx = function(p,mat) {
+      var res = function(state) {
 	 state.transform = mat_x_mat(mat, state.transform);
       };
+      res.sort_order = p;
+      return res;
    };
-   var translate = function(x,y) { return tx([1,0,0,1,x,y]); };
-   var scale = function(x,y) { return tx([x,0,0,y,0,0]); };
+   var translate = function(x,y) { return tx(4,[1,0,0,1,x,y]); };
+   var scale = function(x,y) { return tx(2,[x,0,0,y,0,0]); };
    var skew = function(ydeg,xdeg) {
-      yrad = Math.PI * ydeg / 180.0;
-      xrad = Math.PI * xdeg / 180.0;
+      var yrad = Math.PI * ydeg / 180.0;
+      var xrad = Math.PI * xdeg / 180.0;
       var new_x_x = Math.cos(xrad);
       var new_x_y = Math.sin(xrad);
       var new_y_x = -Math.sin(yrad);
       var new_y_y = Math.cos(yrad);
-      return tx( [new_x_x,new_x_y,new_y_x,new_y_y,0,0]);
+      return tx(1,[new_x_x,new_x_y,new_y_x,new_y_y,0,0]);
    };
    var rot = function(deg) {
       var rad = Math.PI * deg / 180.0;
       var xv = Math.cos(rad);
       var yv = Math.sin(rad);
-      return tx([xv,yv,-yv,xv,0,0]);
+      return tx(3,[xv,yv,-yv,xv,0,0]);
    };
+
    var flip = function(deg) {
-      var rad = Math.PI * deg / 180.0;
-      var yv = Math.sin(rad);
+      var rad = Math.PI * (deg) / 180.0;
       var xv = Math.cos(rad);
-      var rotmat = [xv,yv,-yv,xv,0,0];
-      var mat = mat_x_mat([-1,0,0,1,0,0],rotmat);
-      return tx(mat);
-   }
+      var yv = Math.sin(rad);
+      var yvsq = yv * yv;
+      var vxvy = xv * xv - yv * yv;
+      var vyvx = yv * yv - xv * xv;
+      var mat = [vxvy, 2*xv*yv, 2*xv*yv,vyvx,0,0];
+      return tx(0,mat);
+   };
 
 
    var compile_adjustment = function(adjs) {
-      // TODO: pull out all the transformations into just one.
+      // TODO: pull out all the transformations into just one
+      //   and premultiply.
       return function(state) {
 	 for (var i = 0; i < adjs.length; i++) {
 	    adjs[i](state);
 	 }
-      }
-   }
+      };
+   };
 
    var reorder = function(adjs) {
+      var ordering = function(x) { 
+	 if (!!x.sort_order) { return x.sort_order; }
+	 else { return -1; }
+      };
+      
       // Order by: translation, then rotation, then scaling, then skews, 
       //  and finally flips.
+      // (values are passed in the tx constructor.)
+      adjs.sort(function(a,b) { return ordering(b) - ordering(a); });
+
       return adjs;
    };
 
@@ -405,9 +416,9 @@ var CFA = (function() {
 	 var args = arguments;
 	 return function(ctx) {
 	    ctx[nm].apply(ctx,args);
-	 }
-      }
-   }
+	 };
+      };
+   };
    var moveto = pathfun("moveTo");
    var lineto = pathfun("lineTo");
    var curveto = pathfun("");
@@ -426,17 +437,17 @@ var CFA = (function() {
       var l = (2 - insat) * (inval * 0.5);
       var s = insat * inval;
 
-      if (l <= 1)
-	 s = s / l;
-      else 
-	 s = s / (2 - l);
-
-
+      if (l <= 1) { s = s / l; }
+      else { s = s / (2 - l); }
+      
+      if (isNaN(s)) { s = 0; }
 
       var a = c[3];
-      var result = "hsla(" + h + "," + (s * 100) + "%," + (l * 100) + "%," + a + ")"
+      var result = "hsla(" + h + "," + (s * 100) + "%," + (l * 100) + "%," + a + ")";
+
       return result;
-   }
+   };
+
    var builtin_circle = function(state, cc) {
       var c = state.cfa.canvas;
       c.fillStyle= trans_color(state.color);
@@ -446,20 +457,47 @@ var CFA = (function() {
       c.closePath();
       c.fill();
       return cc;
-   }
+   };
    
    var builtin_square = function(state,cc) {
       var c = state.cfa.canvas;
       c.fillStyle= trans_color(state.color);
       c.setTransform.apply(c,state.transform);
-      c.fillRect(-0.5,-0.5,1,1);
+      c.beginPath();
+      c.moveTo(-0.5,-0.5);
+      c.lineTo(0.5,-0.5);
+      c.lineTo(0.5,0.5);
+      c.lineTo(-0.5,0.5);
+      c.closePath();
+      c.fill();
       return cc;
-   }
+   };
 
+   var h = 0.5 / (Math.cos(Math.PI/6.0));
+   var hp = h;
+   var hn = -h / 2.0;
+   var builtin_triangle = function(state,cc) {
+      var c = state.cfa.canvas;
+      c.fillStyle = trans_color(state.color);
+      c.beginPath();
+      c.moveTo(0,hp);
+      c.lineTo(-0.5,hn);
+      c.lineTo(0.5,hn);
+      c.lineTo(0.0,hp);
+      c.closePath();
+      c.fill();
+      return cc;
+   };
+
+   var builtins = {
+	 'CIRCLE' : builtin_circle,
+	 'SQUARE' : builtin_square,
+	 'TRIANGLE' : builtin_triangle
+   };
 
    var ident = p(/([a-zA-Z0-9]+)/);
    var fname = p(/"?([a-zA-Z0-9.]+)"?/);
-   var number = app(p(/([-+]?[0-9]*\.?[0-9]+)/), parseFloat);
+   var number = app(p(/([\-+]?[0-9]*\.?[0-9]+)/), parseFloat);
    var parse_cva = function(str) {
 
       // Adjustments:
@@ -495,7 +533,7 @@ var CFA = (function() {
 	  seq([lit('\\|'),alt(lit('hue'),lit('h')), number], 
 	      function(_,_,h) { return hue_settgt(h); }),
 	  seq([lit('\\|'),alt(lit('saturation'),lit('sat')), number], 
-	      function(_,_,_v) { return saturation_settgt(v); }),
+	      function(_,_,v) { return saturation_settgt(v); }),
 	  seq([lit('\\|'),alt(lit('brightness'),lit('b')), number], 
 	      function(_,_,v) { return brightness_settgt(v); }),
 	  seq([lit('\\|'),alt(lit('alpha'),lit('a')), number], 
@@ -559,13 +597,9 @@ var CFA = (function() {
       var ncfa = {
 	 rules : {},
 	 start_rule : "",
-	 compiled_rules : {
-	     'CIRCLE' : builtin_circle,
-	    'SQUARE' : builtin_square,
-	    'TRIANGLE' : builtin_square
-	 },
+	 compiled_rules : builtins,
 	 background : [0,0,1,1],
-	 paths : {},
+	 paths : {}
       };
       
       var res_p = result[0][0];
@@ -577,35 +611,54 @@ var CFA = (function() {
 
    var default_opts = {
       recurse : function(f,state,cc) {
-	 var t = state.transform
+	 var t = state.transform;
 	 var xlen_sq = t[0] * t[0] + t[1]*t[1];
 	 var ylen_sq = t[2] * t[2] + t[3]*t[3];
-	 if (xlen_sq < 0.05 | ylen_sq < 0.05) { 
-	    // when we're small, call it done.
+	 if (xlen_sq < 0.05 && ylen_sq < 0.05) { 
+	    // when small, call it done.
 	    return cc;
 	 }
-	 if (state.depth > 10000) {
-	    return cc;
-	 } else
-	 return function() { return f(state,cc) };
+	 if (state.depth > 10000) { return cc; }
+	 else { return function() { return f(state,cc); }; }
       },
       cont : function(cc) {
 	 return cc; // Note the missing call parens! trampolined style.
       }
    };
    
-   var sampling_opts = {
-      recurse : function(f,state,cc) {
-	 var xlen_sq = t[0] * t[0] + t[1]*t[1];
-	 var ylen_sq = t[2] * t[2] + t[3]*t[3];
-	 if (xlen_sq < 0.5 | ylen_sq < 0.5)
-	    return cc;
-	 if (state.depth > 1000)
-	    return cc;
-	 return function() { return f(state,cc); }
-      },
-      cont : function(cc) { return cc; }
-   }
+   var builtin_nop = function(state,cc) { return cc; };
+
+   var sampling_recursion = function(sampler) {
+      return function(f,state,cc) {
+	 var unitx = vect_x_mat([1,0],state.transform);
+	 var unity = vect_x_mat([0,1],state.transform);
+
+	 var s = function(usemin,vectidx,boxidx) {
+	    var f = usemin ? Math.min : Math.max;
+	    var nmin = f(sampler.bbox[boxidx],
+			 unitx[vectidx],
+			 unity[vectidx]);
+	    if ((nmin < sampler.bbox[boxidx]) == usemin) {
+	       sampler.delta[boxidx] = Math.abs(nmin - sampler.bbox[boxidx]);
+	       sampler.bbox[boxidx] = nmin;
+	    }
+	 };
+	 
+	 s(true,0,0);
+	 s(true,1,1);
+	 s(false,0,2);
+	 s(false,0,3);
+
+	 var xlen_sq = Math.max(unitx[0],unity[0]);
+	 xlen_sq *= xlen_sq;
+	 var ylen_sq = Math.max(unitx[1],unity[1]);
+	 ylen_sq *= ylen_sq;
+	 if (xlen_sq < 0.005 | ylen_sq < 0.005) { return cc; }
+	 if (state.depth > 100) { return cc; } // only 100 deep.
+
+	 return function() { return f(state,cc); };
+      };
+   };
 
    var call_trampoline = function(f) {
       var cur = f;
@@ -621,7 +674,62 @@ var CFA = (function() {
 	 }
       }
       return cur;
-   }
+   };
+
+   var get_scale = function(cfa) {
+      // "Quickly" sample a CFA to get an idea of extents.
+      
+      var stats = { bbox : [0,0,0,0], delta: [0,0,0,0] };
+      // Save the old recursion function.
+      var old_cont = cfa.cont;
+      var old_recurs = cfa.recurse;
+      var old_builtins = cfa.compiled_rules;
+      cfa.compiled_rules = {
+	 'TRIANGLE' : builtin_nop,
+	 'SQUARE' : builtin_nop,
+	 'CIRCLE': builtin_nop
+      };
+
+      cfa.cont = default_opts.cont;
+      cfa.recurse = sampling_recursion(stats);
+      
+      var raw_trampoline = function(f) {
+	 while (typeof(f) == 'function') {
+	    f = f();
+	 }
+	 return f;
+      };
+
+      var bbox = [0,0,0,0];
+      // Run a CFA for a bit to get a rough idea of its bbox.
+      var initial_state = {
+	 color : [0,0,0,1],
+	 target_color : [0,0,0,1],
+	 transform : [1,0,0,1,0,0],
+	 cfa : cfa,
+	 depth : 0
+      };
+      var initial_trans = compile_adjustment([]);
+      var fin_cc = function() { stats.done = true; };
+      var go = apply_rule(cfa.startshape,initial_trans);
+      raw_trampoline(function() { return go(initial_state,fin_cc); } );
+
+      if (!stats.done) {
+	 alert("hrm");
+      }
+      
+      // restore
+      cfa.cont = old_cont;
+      cfa.recurse = old_recurs;
+      cfa.compiled_rules = old_builtins;
+      
+      // grow by last delta?
+      stats.bbox[0] += -1 * stats.delta[0];
+      stats.bbox[1] += -1 * stats.delta[1];
+      stats.bbox[2] += stats.delta[2];
+      stats.bbox[3] += stats.delta[3];
+      return stats.bbox;
+   };
 
    return {
       parse : function(taid) {
@@ -631,22 +739,31 @@ var CFA = (function() {
 	 return r;
       },
       exec : function(cfa, w,h,canvas_id, exec_opts) {
-	 if (!exec_opts)
-	    exec_opts = default_opts;
+	 if (!exec_opts) { exec_opts = default_opts; }
 
-	 cfa.recurse = exec_opts.recurse;
-	 cfa.cont = exec_opts.cont;
 
 	 var canvas = document.getElementById(canvas_id);
 	 
 	 cfa.canvas = canvas.getContext('2d');
 	 cfa.canvas.setTransform(1,0,0,1,0,0);
 	 cfa.canvas.fillStyle = trans_color(cfa.background);
+	 cfa.canvas.clearRect(0,0,w,h);
 	 cfa.canvas.fillRect(0,0,w,h);
 
 	 // TODO: Determine bounding box by sampling the shape:
-	 var initial_adj = compile_adjustment([scale(0.2,0.2)]);
+	 var bbox = get_scale(cfa);
+	 /*
+	 var w = bbox[2] - bbox[0];
+	 var h = bbox[3] - bbox[1];
+	 var x = bbox[0];
+	 var y = bbox[1];  */
+	 console.log("BBOX",bbox);  
+	 var initial_adj = compile_adjustment([scale(0.01,0.01)]);
 	 
+	 cfa.compiled_rules = builtins;
+	 cfa.recurse = exec_opts.recurse;
+	 cfa.cont = exec_opts.cont;
+
 	 var initial_state = {
 	    color : [0,0,0,1],
 	    target_color : [0,0,0,1],
@@ -655,7 +772,7 @@ var CFA = (function() {
 	    depth : 0
 	 };
 	 
-	 var fin_cc = function() { console.log("done"); }
+	 var fin_cc = function() { console.log("done"); };
 	 var go = apply_rule(cfa.startshape, initial_adj);
 	 call_trampoline(function() { return go(initial_state, fin_cc); });
       },
