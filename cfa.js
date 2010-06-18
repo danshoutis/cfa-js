@@ -26,137 +26,246 @@ var CFA = (function() {
    };
 
    // -------- Preliminaries : Parsing framework. -----------------
-   var chomp = function(str) {
-      if (str.length === 0) {
-	 return str;
-      }
-      var i = 0;
-      while (i < str.length) {
-	 if (/\s/m.test(str[i])) {
-	    i++;
-	 } else {
-	    if (str[i] == '/' && (i + 1 < str.length) && str[i+1] == "/") {
-	       while (i < str.length && str[i] != "\n") { i++; }
-	    }
-	    else if (str[i] == "/" && (i + 1 < str.length) && str[i+1] == "*") {
-	       while (i < str.length && !(str[i] == '/' && str[i-1] == "*")) {
-		  i++;
+   var Parsing = function() {
+      var State = function (str,idx,line,col) {
+	 return {
+	    idx : idx,
+	    eof : (idx+1) >= str.length,
+	    cur : str[idx],
+	    str : str,
+	    peek2 : str[idx] + (function() { 
+	       return ((idx+1) < str.length) ? str[idx + 1] : ""; 
+	    })(),
+	    advance : function() {
+	       if (this.cur == "\n") {
+		  return new State(str,idx+1,line+1,0);
+	       } else {
+		  return new State(str,idx+1,line,col+1);
 	       }
-	       i++; // one extra to go past the final slash
-	    }
-	    else { return str.substr(i); }
-	 }
-      }
-   };
-
-   // Simple combinator parsers. Not particularly efficient.
-   var p = function(rx) { // parse a regex.
-      return (function(instr) {
-	 var str = chomp(instr);
-	 var m = rx.exec(str);
-	 if (null === m) { return []; }
-	 if (m.index !== 0) { return []; } // not at beginning.
-
-	 return [[m[1], str.substr(m.index + m[0].length)]]; // return 1st paren group
-      });
-   };
-
-   var alt = function() {
-      var alts = arguments;
-      return (function(str) {
-
-	 var rs = [];
-	 for (var i = 0; i < alts.length; i++) {
-	    var res = alts[i](str);
-	    rs.push(res);
-	 }
-
-	 return [].concat.apply([], rs);
-      });
-   };
-   
-   var seq_i = function(a,b) { // sequence two parsers
-      return function(str) {
-	 var res_a = a(str);
-	 var res_fin = [];
-	 for (var i = 0; i < res_a.length; i++) {
-	    var ra = res_a[i];
-	    var a_obj = ra[0];
-	    var res_b = b(ra[1]);
-	    for (var j = 0; j < res_b.length; j++) {
-	       var rb = res_b[j];
-	       var b_obj = rb[0];
-	       res_fin.push( [[a_obj,b_obj], rb[1]] );
-	    }
-	 }
-
-	 return res_fin;
+	    },
+	    txt : function () { return str.substring(idx); }
+	 };
       };
-   };
 
-   var app = function(parser, fn) { // apply a fn to the result of a parse
-      return function(str) {
-	 var res = parser(str);
-	 for (var i = 0; i < res.length; i++) {
-	    res[i][0] = fn(res[i][0]);
-	 }
-	 return res;
+      var win = function(result,st) {
+	 return [ [true, result, st] ];
       };
-   };
 
-   var succeed = function(v) {
-      return function(str) {
-	 return [[v,str]];
+      var lose = function(msg, st) {
+	 return  [ [false, msg, st] ];
       };
-   };
-
-   var seq = function(parsers, fn) { 
-      // Helper: parse 'parsers' in a row, then apply the target fn. 
-      var s = succeed([]);
-      for (var i = parsers.length - 1; i >= 0; i--) {
-	 s = (function(ns) { return seq_i(parsers[i], ns); })(s);
-      }
-
-      var flatten_seq_res = function(vs) {
+      var wins = function(res) {
 	 var r = [];
-	 var v = vs;
-
-	 while (v.length > 0) {
-	    r.push(v[0]);
-	    v = v[1];
+	 for (var i = 0; i < res.length; i++) {
+	    if (res[i][0] == true) { 
+	       r.push(res[i]); 
+	    }
 	 }
-
 	 return r;
       };
 
-      var app_i = function(r) {
-	 return fn.apply("_no_this", flatten_seq_res(r));
+      var r_advance = function(st) {
+	 var s = st;
+	 var done = true;
+	 do {
+	    done = true;
+	    if (/\s/.test(s.cur)) { done = false; }
+	    if (s.peek2 == "//") {  // cpp comment
+	       while (!s.eof && s.cur != "\n") {
+		  s = s.advance();
+	       }
+	       done = false;
+	    }
+	    if (s.peek2 == "/*") {  // c comment
+	       while (!s.eof && s.peek2 != "*/") {
+		  s = s.advance();
+	       }
+	       s = s.advance(); // extra advance for final slash
+	       done = false;
+	    }
+	    if (!done) { s = s.advance(); }
+	 } while (!done);
+	 return s;
+      };
+      
+      // Parser that consumes nothing and succeeds
+      var succeed = function(v) {
+	 return function(st) { 
+	    return win(v,st);
+	 };
       };
 
-      return app(s, app_i);
-   };
+      // Parser that fails
+      var fail = function() {
+	 return function(st) { return lose("failed",st); };
+      };
 
-   var many = function(parser) {
-      return function(str) {
-	 return alt(succeed([]),
-		    seq([parser, many(parser)], 
-			function(hd,rest) {
-			   return [hd].concat(rest); }))(str);
+      // Make a nonterminal whose contents are initially empty:
+      var nt = function () {
+	 var res = function(st) {
+	    return res.inner(st);
+	 };
+	 res.inner = fail();
+	 return res;
+      };
+
+      // Parser for a regex.
+      var p = function(rx, nm) {
+	 return function(st) {
+	    var s = r_advance(st);
+	    var t = s.txt();
+	    var m = rx.exec(t);
+	    if (null === m || m.index !== 0) {
+	       return lose("Expecting a " + nm, st);
+	    }
+	    var result = m[0];
+	    for (var i = 0 ; i < result.length; i++) {
+	       s = s.advance();
+	    }
+	    return win(result,s);
+	 };
+      };
+
+      // Parser for a literal
+      var lit = function(l) {
+	 return function(st) {
+	    var s = r_advance(st);
+	    var idx = 0;
+	    while (idx < l.length) {
+	       if (l[idx] != s.cur) {
+		  return lose("Expecting '" + l + "'",s); 
+	       }
+	       s = s.advance();
+	       idx++;
+	    }
+	    return win(l,s);
+	 };
+      };
+
+      // Sequence two parsers:
+      var seq_i = function(a,b) {
+	 return function(st) {
+
+	    var a_raw_res = a(st);
+	    var ares = wins(a_raw_res);
+	    if (ares.length == 0) { return a_raw_res; }
+
+	    var fin = [];
+	    for (var i = 0; i < ares.length; i++) {
+	       var aobj = ares[i][1];
+	       var ast = ares[i][2];
+
+	       var b_raw_res = b(ast);
+	       var bres = wins(b_raw_res);
+		       
+	       for (var j = 0; j < bres.length; j++) {
+		  var br = bres[j];
+		  if (br[0]) {
+
+		     fin.push([true, [aobj, br[1]], br[2]]);
+		  } else {
+		     fin.push(br);
+		  }
+	       }
+	
+	    }
+	    return fin;
+
+	 };
+      };
+
+      // Alternatives:
+      var alt = function() {
+	 var alts = arguments;
+	 return function(st) {
+	    var res = [];
+	    for (var i = 0; i < alts.length; i++) {
+	       res = res.concat(alts[i](st));
+	    }
+	    return res;
+	 };
+      };
+
+      // Apply function to parser results:
+      var app = function(parser, fn) {
+	 return function(st) {
+	    var res = parser(st);
+	    for (var i = 0; i < res.length; i++) {
+	       if (res[i][0]) {
+		  res[i][1] = fn(res[i][1]);
+	       }
+	    }
+	    return res;
+	 };
+      };
+
+      // internal helper: list cons.
+      var lstcons = function(a,b) {
+	 var r = [a].concat(b);
+	 return r;
+      };
+
+      // Helper: parse 'parsers' in a row, then apply the target fn. 
+      var seq = function(parsers, fn) {
+	 var imp = function(ps) {
+	    if (ps.length == 0) { return succeed([]); };
+	    var hd = ps[0];
+	    ps.shift();
+	    var rst = imp(ps);
+	    return seq_i(hd,rst);
+	 };
+
+	 var fltn = function(ks) {
+	    var r = [];
+	    var cur = ks;
+	    while (cur.length > 0) {
+	       r.push(cur[0]);
+	       cur = cur[1];
+	    }
+	    return r;
+	 };
+
+	 return app(imp(parsers), function(x) {
+	    return fn.apply([],fltn(x)); 
+	 });
+      };
+      
+      var many = function(parser) {
+	 var many_i = nt();
+	 many_i.inner = alt(succeed([]),
+			    seq([parser,many_i], lstcons));
+	 return many_i;
+      };
+
+      var some = function(parser) {
+	 return seq([parser,many(parser)], lstcons);
+      };
+
+      var end_of_input = function(st) {
+	 var s = r_advance(st);
+
+	 if (s.eof)
+	    { return win(true,s); }
+	 else
+	    { return lose("Extra input after end:" + s.txt(),s); }
+      };
+
+      return {
+	 init : function(str) { return new State(str,0,0,0); },
+	 succeed : succeed,
+	 fail : fail,
+	 nt : nt,
+	 p : p,
+	 lit : lit,
+	 seq : seq,
+	 alt : alt,
+	 some : some,
+	 many : many,
+	 eof : end_of_input,
+	 wins : wins,
+	 app : app
       };
    };
-
-   var some = function(p) { return seq([p,many(p)],
-				      function(hd,rst) { return [hd].concat(rst);} ); };
-
-   var end_of_input = function(instr) {
-      var str = chomp(instr);
-      if (typeof(str) == 'undefined' || str.length === 0) {
-	 return [ [true, ""] ];
-      }
-      else { return []; }
-   };
-
-   var lit = function(x) { return p(new RegExp("(" + x + ")")); };
 
    // ------ Context Free Art -----------
    
@@ -235,7 +344,6 @@ var CFA = (function() {
 	 return rs[0](state,cc);
       };
    };
-
 
    var with_saved_state = function(callback, state, cc) {
       // Save the state:
@@ -498,10 +606,17 @@ var CFA = (function() {
 	 'SQUARE' : builtin_square,
 	 'TRIANGLE' : builtin_triangle };
    };
-   var ident = p(/([a-zA-Z0-9]+)/);
-   var fname = p(/"?([a-zA-Z0-9.]+)"?/);
-   var number = app(p(/([\-+]?[0-9]*\.?[0-9]+)/), parseFloat);
    var parse_cva = function(str) {
+      var Pr = Parsing();
+
+      // *sigh* I should use the 'with' statement. 
+      var succeed = Pr.succeed; var fail = Pr.fail; var nt = Pr.nt; var p = Pr.p; var lit = Pr.lit;
+      var seq = Pr.seq; var alt = Pr.alt; var some = Pr.some; var many = Pr.many; var eof = Pr.eof;
+      var app = Pr.app;
+
+      var ident = p(/([a-zA-Z0-9]+)/, "identifier");
+      var fname = p(/"?([a-zA-Z0-9.]+)"?/, "filename");
+      var number = app(p(/([\-+]?[0-9]*\.?[0-9]+)/,"number"), parseFloat);
 
       // Adjustments:
       var adj = 
@@ -533,33 +648,33 @@ var CFA = (function() {
 	      function(_,v) { return alpha(v); }),
 
 	  // Adjust target color:
-	  seq([lit('\\|'),alt(lit('hue'),lit('h')), number], 
+	  seq([lit('|'),alt(lit('hue'),lit('h')), number], 
 	      function(_,_,h) { return hue_settgt(h); }),
-	  seq([lit('\\|'),alt(lit('saturation'),lit('sat')), number], 
+	  seq([lit('|'),alt(lit('saturation'),lit('sat')), number], 
 	      function(_,_,v) { return saturation_settgt(v); }),
-	  seq([lit('\\|'),alt(lit('brightness'),lit('b')), number], 
+	  seq([lit('|'),alt(lit('brightness'),lit('b')), number], 
 	      function(_,_,v) { return brightness_settgt(v); }),
-	  seq([lit('\\|'),alt(lit('alpha'),lit('a')), number], 
+	  seq([lit('|'),alt(lit('alpha'),lit('a')), number], 
 	      function(_,_,v) { return alpha_settgt(v); }),
 
 	  // Move drawing color closer to target color:
-	  seq([alt(lit('hue'),lit('h')), number,lit('\\|')], 
+	  seq([alt(lit('hue'),lit('h')), number,lit('|')], 
 	      function(_,h,_) { return hue_tgt(h); }),
-	  seq([alt(lit('saturation'),lit('sat')), number, lit('\\|')], 
+	  seq([alt(lit('saturation'),lit('sat')), number, lit('|')], 
 	      function(_,v,_) { return saturation_tgt(v); }),
-	  seq([alt(lit('brightness'),lit('b')), number, lit('\\|')], 
+	  seq([alt(lit('brightness'),lit('b')), number, lit('|')], 
 	      function(_,v,_) { return brightness_tgt(v); }),
-	  seq([alt(lit('alpha'),lit('a')), number,lit('\\|')], 
+	  seq([alt(lit('alpha'),lit('a')), number,lit('|')], 
 	      function(_,v,_) { return alpha_tgt(v); })
 
 	  );
 	  
-      var adjustment = alt(seq([p(/(\[)/), many(adj), p(/(\])/)], function(_,adjs,_) {  return compile_adjustment(adjs); }),
-			   seq([p(/(\{)/), many(adj), p(/(\})/)], function(_,adjs,_) { return compile_adjustment(reorder(adjs)); }));
+      var adjustment = alt(seq([lit("["), many(adj), lit("]")], function(_,adjs,_) {  return compile_adjustment(adjs); }),
+			   seq([lit("{"), many(adj), lit("}")], function(_,adjs,_) { return compile_adjustment(reorder(adjs)); }));
 			   
 
       // Read a rule!
-      var ntimes = seq([number,lit('\\*'),adjustment,ident,adjustment],
+      var ntimes = seq([number,lit('*'),adjustment,ident,adjustment],
 		       function(count,_,adj1,nm,adj2) {
 			  return ntimes_apply(count, apply_rule(nm,adj2),adj1);
 		       });
@@ -567,7 +682,7 @@ var CFA = (function() {
       var statement = alt(seq([ident, adjustment],
 			  function(nm,adj) { return apply_rule(nm,adj); }),
 			  ntimes);
-      var rbody = seq([p(/(\{)/),some(statement), p(/(\})/)],
+      var rbody = seq([lit("{"),some(statement), lit("}")],
 		      function(_,b,_) { return b; });
 
 
@@ -587,11 +702,22 @@ var CFA = (function() {
 			  );
 
       
-
       // Actually run the parse:
-      var result = 
-      seq([many(directive),end_of_input], function(r,_) { return r;})(str);
+      //var result = seq([ident,many(alt(number,ident)),eof],function(a,b,_) { 
+	// console.log("Success!",a,b);
+	// return a; 
+      //})(Pr.init(str));
+      var result = seq([many(directive),eof], 
+		       function(r,_) { return r;})(Pr.init(str));
       
+      var w = Pr.wins(result);
+      if (w.length == 0) {
+	 var last_failure = result[result.length-1][1];
+	 throw("Parsing error: " + last_failure);
+      }
+
+      var res_p = result[0][1];
+
       var ncfa = {
 	 rules : {},
 	 start_rule : "",
@@ -600,10 +726,10 @@ var CFA = (function() {
 	 paths : {}
       };
       
-      var res_p = result[0][0];
       for (var i = 0; i < res_p.length; i++) {
 	 res_p[i](ncfa);
       }
+
       return ncfa;
    };
 

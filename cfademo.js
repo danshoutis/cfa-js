@@ -42,8 +42,6 @@ $(document.body).ready(function() {
 	 bbox[i] = parseFloat(bbox[i]);
       }
       
-      console.log($("#cfa_script").val());
-
       var cfa = CFA.parse('cfa_script');
       is_running = true;
       halt_fn = CFA.exec(cfa, bbox, 'canvas');
