@@ -33,6 +33,8 @@ var CFA = (function() {
 	    eof : (idx+1) >= str.length,
 	    cur : str[idx],
 	    str : str,
+	    line : line,
+	    col : col,
 	    peek2 : str[idx] + (function() { 
 	       return ((idx+1) < str.length) ? str[idx + 1] : ""; 
 	    })(),
@@ -148,26 +150,25 @@ var CFA = (function() {
 
 	    var a_raw_res = a(st);
 	    var ares = wins(a_raw_res);
+	    var fin = [];
+
 	    if (ares.length == 0) { return a_raw_res; }
 
-	    var fin = [];
+
 	    for (var i = 0; i < ares.length; i++) {
 	       var aobj = ares[i][1];
 	       var ast = ares[i][2];
 
 	       var b_raw_res = b(ast);
-	       var bres = wins(b_raw_res);
 		       
-	       for (var j = 0; j < bres.length; j++) {
-		  var br = bres[j];
+	       for (var j = 0; j < b_raw_res.length; j++) {
+		  var br = b_raw_res[j];
 		  if (br[0]) {
-
 		     fin.push([true, [aobj, br[1]], br[2]]);
 		  } else {
 		     fin.push(br);
 		  }
 	       }
-	
 	    }
 	    return fin;
 
@@ -291,7 +292,6 @@ var CFA = (function() {
    };
    var bkgd = function(color_trans) {
       return function(cfa) {
-	 console.log("applying bkgd", color_trans);
 	 var dummy_state = { color : [0,0,1,1] };
 	 color_trans(dummy_state);
 	 cfa.background = dummy_state.color;
@@ -375,8 +375,6 @@ var CFA = (function() {
 
 	 // Lazy compile if needed:
 	 if (!!!cfa.compiled_rules[nm]) {
-
-	    console.log("compiling: " + nm);
 	    cfa.compiled_rules[nm] = compile_rule(state.cfa.rules[nm]);
 	 }
 
@@ -674,15 +672,20 @@ var CFA = (function() {
 			   
 
       // Read a rule!
-      var ntimes = seq([number,lit('*'),adjustment,ident,adjustment],
-		       function(count,_,adj1,nm,adj2) {
-			  return ntimes_apply(count, apply_rule(nm,adj2),adj1);
-		       });
+      var rbody = nt();
+      var ntimes = alt(seq([number,lit('*'),adjustment,ident,adjustment],
+			   function(count,_,adj1,nm,adj2) {
+			      return ntimes_apply(count, apply_rule(nm,adj2),adj1);
+			   }),
+		       seq([number,lit('*'),adjustment,rbody],
+			   function(count,_,adj,bdy) {
+			      return ntimes_apply(count, compile_rule_body(bdy), adj);
+			   }));
       
       var statement = alt(seq([ident, adjustment],
 			  function(nm,adj) { return apply_rule(nm,adj); }),
 			  ntimes);
-      var rbody = seq([lit("{"),some(statement), lit("}")],
+      rbody.inner = seq([lit("{"),some(statement), lit("}")],
 		      function(_,b,_) { return b; });
 
 
@@ -702,21 +705,17 @@ var CFA = (function() {
 			  );
 
       
-      // Actually run the parse:
-      //var result = seq([ident,many(alt(number,ident)),eof],function(a,b,_) { 
-	// console.log("Success!",a,b);
-	// return a; 
-      //})(Pr.init(str));
       var result = seq([many(directive),eof], 
 		       function(r,_) { return r;})(Pr.init(str));
       
       var w = Pr.wins(result);
       if (w.length == 0) {
-	 var last_failure = result[result.length-1][1];
-	 throw("Parsing error: " + last_failure);
+	 var last_failure = result[result.length-1];
+	 throw(["Parsing error on line: " + last_failure[2].line + "," +
+		last_failure[2].col]);
       }
 
-      var res_p = result[0][1];
+      var res_p = w[0][1];
 
       var ncfa = {
 	 rules : {},
@@ -896,7 +895,7 @@ var CFA = (function() {
 	 var bx = bbox[0];
 	 var by = bbox[1];
 	 var scl = 1.0 / Math.max(bw,bh);
-	 console.log("bbox",bbox, scl);
+
 	 var initial_adj = compile_adjustment([scale(scl,scl),translate(-bx,-by)]);
 	 
 	 cfa.recurse = exec_opts.recurse;
