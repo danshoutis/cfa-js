@@ -15,6 +15,9 @@
     <p>
       A javascript+canvas implementation of the <a href="http://contextfreeart.org">Context Free Art</a> design grammar: Put short code in, get pretty pictures out! <a href="#tut">How to use it</a>. <a href="#uth">How it works</a>. <a href="#status">Implementation status</a>.
     </p>
+    <p>
+      If you have feedback of any kind, <a href="mailto:dan@shoutis.org">drop me a line</a> or <a href="http://blog.shoutis.org/2010/06/context-free-art-in-javascript.html">leave a comment</a>. Thanks!
+    </p>
     <div class="disclaimer">
       <h2>Reinventing the wheel.</h2>
       <p>Turns out, I'm not the first one to do this. Thankfully, I'm in good company. Check out <a href="http://azarask.in/projects/algorithm-ink/">Algorithm Ink</a> by <a href="http://www.azarask.in/">Aza Raskin</a>, who happens to be the lead designer for Firefox.</p>
@@ -74,6 +77,7 @@
       <ul>
 	<li>Not implemented yet: complex repetition.</li>
 	<li>Not implemented yet: expressions in adjustment values.</li>
+	<li>Not implemented yet: paths.</li>
 	<li>Not planned to implement: z-ordering.</li>
 	<li>Difference: Much slower.</li>
 	<li>Difference: But, you get to watch it draw!</li>
@@ -475,6 +479,18 @@ rule blah2 {
  
       </div>
     </div>
+<script type="text/javascript">
 
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-2432520-3']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+
+</script>
   </body>
 </html>

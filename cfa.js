@@ -1,5 +1,6 @@
 /* Context-free art ----> js+canvas interpreter. */
-
+/* License: GPL! */
+/* Fixme: flesh that out. */
 var CFA = (function() {
    var console_a = { log : function() { } };
    if (typeof(console) == 'undefined') {
