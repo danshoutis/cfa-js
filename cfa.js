@@ -751,38 +751,6 @@ var CFA = (function() {
    
    var builtin_nop = function(state,cc) { return cc; };
 
-   var sampling_recursion = function(sampler) {
-      return function(f,state,cc) {
-	 var unitx = vect_x_mat([1,0],state.transform);
-	 var unity = vect_x_mat([0,1],state.transform);
-
-	 var s = function(usemin,vectidx,boxidx) {
-	    var f = usemin ? Math.min : Math.max;
-	    var nmin = f(sampler.bbox[boxidx],
-			 unitx[vectidx],
-			 unity[vectidx]);
-	    if ((nmin < sampler.bbox[boxidx]) == usemin) {
-	       sampler.delta[boxidx] = Math.abs(nmin - sampler.bbox[boxidx]);
-	       sampler.bbox[boxidx] = nmin;
-	    }
-	 };
-	 
-	 s(true,0,0);
-	 s(true,1,1);
-	 s(false,0,2);
-	 s(false,0,3);
-
-	 var xlen_sq = Math.max(unitx[0],unity[0]);
-	 xlen_sq *= xlen_sq;
-	 var ylen_sq = Math.max(unitx[1],unity[1]);
-	 ylen_sq *= ylen_sq;
-	 if (xlen_sq < 0.5 | ylen_sq < 0.5) { return cc; }
-	 if (state.depth > 100) { return cc; } // only 100 deep.
-
-	 return function() { return f(state,cc); };
-      };
-   };
-
    var call_trampoline = function(f) {
       var halted = false;
       var call_imp = function(ff) {
@@ -812,61 +780,6 @@ var CFA = (function() {
       };
    };
 
-   var get_scale = function(cfa) {
-      // "Quickly" sample a CFA to get an idea of extents.
-      
-      var stats = { bbox : [0,0,0,0], delta: [0,0,0,0] };
-      // Save the old recursion function.
-      var old_cont = cfa.cont;
-      var old_recurs = cfa.recurse;
-      var old_builtins = cfa.compiled_rules;
-      cfa.compiled_rules = {
-	 'TRIANGLE' : builtin_nop,
-	 'SQUARE' : builtin_nop,
-	 'CIRCLE': builtin_nop
-      };
-
-      cfa.cont = default_opts.cont;
-      cfa.recurse = sampling_recursion(stats);
-      
-      var raw_trampoline = function(f) {
-	 while (typeof(f) == 'function') {
-	    f = f();
-	 }
-	 return f;
-      };
-
-      var bbox = [0,0,0,0];
-      // Run a CFA for a bit to get a rough idea of its bbox.
-      var initial_state = {
-	 color : [0,0,0,1],
-	 target_color : [0,0,0,1],
-	 transform : [1,0,0,1,0,0],
-	 cfa : cfa,
-	 depth : 0
-      };
-      var initial_trans = compile_adjustment([]);
-      var fin_cc = function() { stats.done = true; };
-      var go = apply_rule(cfa.startshape,initial_trans);
-      raw_trampoline(function() { return go(initial_state,fin_cc); } );
-
-      if (!stats.done) {
-	 alert("hrm");
-      }
-      
-      // restore
-      cfa.cont = old_cont;
-      cfa.recurse = old_recurs;
-      cfa.compiled_rules = old_builtins;
-      
-      // grow by last delta?
-      /* stats.bbox[0] += -1 * stats.delta[0];
-      stats.bbox[1] += -1 * stats.delta[1];
-      stats.bbox[2] += stats.delta[2];
-      stats.bbox[3] += stats.delta[3]; */
-      return stats.bbox;
-   };
-
    return {
       parse : function(taid) {
 	 var ta = document.getElementById(taid);
@@ -878,12 +791,10 @@ var CFA = (function() {
       exec : function(cfa, bbox,canvas_id, exec_opts) {
 	 if (!exec_opts) { exec_opts = default_opts; }
 
-
 	 var canvas = document.getElementById(canvas_id);
 	 var w = canvas.width;
 	 var h = canvas.height; 
 	 
-
 	 cfa.canvas = canvas.getContext('2d');
 	 cfa.canvas.setTransform(1,0,0,1,0,0);
 	 cfa.canvas.fillStyle = trans_color(cfa.background);
