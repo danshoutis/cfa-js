@@ -475,11 +475,7 @@ var CFA = (function() {
    var skew = function(ydeg,xdeg) {
       var yrad = Math.PI * ydeg / 180.0;
       var xrad = Math.PI * xdeg / 180.0;
-      var new_x_x = Math.cos(xrad);
-      var new_x_y = Math.sin(xrad);
-      var new_y_x = -Math.sin(yrad);
-      var new_y_y = Math.cos(yrad);
-      return tx(1,[new_x_x,new_x_y,new_y_x,new_y_y,0,0]);
+      return tx(1,[1.0,Math.tan(yrad),Math.tan(xrad),1.0,0,0]);
    };
    var rot = function(deg) {
       var rad = Math.PI * deg / 180.0;
@@ -495,7 +491,10 @@ var CFA = (function() {
       var yvsq = yv * yv;
       var vxvy = xv * xv - yv * yv;
       var vyvx = yv * yv - xv * xv;
-      var mat = [vxvy, 2*xv*yv, 2*xv*yv,vyvx,0,0];
+      var mat = [2 * xv * xv - 1, 
+		 2 * xv * yv,
+		 2 * xv * yv,
+		 2 * yv * yv - 1,0,0];
       return tx(0,mat);
    };
 
