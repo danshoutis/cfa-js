@@ -312,14 +312,21 @@ var CFA = (function() {
    // Sequence functions of (state, cc) in continuation-passing style.
    // --
    var seq_cps = function(fns) {
-      if (fns.length === 0) { return function(st,cc) { return cc(); }; }
-      if (fns.length == 1) { return fns[0]; }
+      if (fns.length === 0) { 
+	 return function(st,cc) { return cc(); }; }
+      if (fns.length == 1) { 
+	 return fns[0]; }
+      
+      var cur_f = fns[fns.length -1 ];
+      for (var i = fns.length - 2; i >= 0; i--) {
+	 cur_f = (function(hd,tl) {
+	    return function(st,cc) { 
+	       return hd(st, function() { return tl(st,cc); }); 
+	    }
+	 })(fns[i],cur_f);
+      }
 
-      var hd = fns.shift();
-      var tl = seq_cps(fns);
-      return function(st,cc) {
-	 return hd(st, function() { return tl(st,cc); });
-      };
+      return cur_f;
    };
 
    var compile_rule_body = seq_cps; 
@@ -395,19 +402,14 @@ var CFA = (function() {
    };
 
    var ntimes_apply = function(count, action, adj) {
-      if (0 >= count) { 
-	 return function(state,cc) {
-	    return state.cfa.cont(cc);
+      var fs = [];
+      for (var i = 0; i < count; i++) {
+	 fs[i] = function(state, cc) {
+	    adj(state);
+	    return action(state, cc);
 	 };
       }
-
-      var hd = action;
-      var rest = ntimes_apply(count-1,action,adj);
-      
-      return function(state, cc) {
-	 adj(state);
-	 return hd(state, function() { return rest(state, cc); });
-      };
+      return seq_cps(fs);
    };
 
    // Color adjustments 
@@ -497,7 +499,6 @@ var CFA = (function() {
 		 2 * yv * yv - 1,0,0];
       return tx(0,mat);
    };
-
 
    var compile_adjustment = function(adjs) {
       // TODO: pull out all the transformations into just one
