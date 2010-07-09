@@ -1,6 +1,10 @@
 /* Context-free art ----> js+canvas interpreter. */
-/* License: GPL! */
-/* Fixme: flesh that out. */
+/* Copyright 2010 Dan Shoutis, dan@shoutis.org
+
+ See accompanying LICENSE for copying information.
+*/
+
+
 var CFA = (function() {
    var console_a = { log : function() { } };
    if (typeof(console) == 'undefined') {
@@ -56,6 +60,7 @@ var CFA = (function() {
       var lose = function(msg, st) {
 	 return  [ [false, msg, st] ];
       };
+
       var wins = function(res) {
 	 var r = [];
 	 for (var i = 0; i < res.length; i++) {
