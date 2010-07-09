@@ -690,7 +690,7 @@ var CFA = (function() {
       var statement = alt(seq([ident, adjustment],
 			  function(nm,adj) { return apply_rule(nm,adj); }),
 			  ntimes);
-      rbody.inner = seq([lit("{"),some(statement), lit("}")],
+      rbody.inner = seq([lit("{"),many(statement), lit("}")],
 		      function(_,b,_) { return b; });
 
 
@@ -770,7 +770,7 @@ var CFA = (function() {
 	    if (count > 1000) { // 1ms pause every 1000 bounces.
 	       window.setTimeout(function() {
 		  call_imp(cur);
-	       }, 10);
+	       }, 1);
 	       return;
 	    }
 	 }
@@ -780,7 +780,6 @@ var CFA = (function() {
 	 call_imp(f);
       }, 10);
       return function() { 
-	 console.log("stopped.");
 	 halted = true;
       };
    };
