@@ -667,13 +667,19 @@ var CFA = (function() {
       var fun = nt();
       var number = nt();
       var exprfunc = nt();
-      num_expr.inner = 
-      alt(
+
+      var num_expr_body = alt(
 	  seq([lit("("),sums,lit(")")], function(_,ss,_) { return ss; }),
 	  seq([exprfunc, lit("("), sums, lit(")")], function(f,_,ss,_) { return f(ss); }),
 	  seq([exprfunc,lit("("),sums,lit(","),sums,lit(")")],
 	      function(f,_,s1,_,s2,_) { return f(s1,s2); })
 	  );
+
+      num_expr.inner = seq([alt(lit("-"),succeed("")), num_expr_body],
+			   function(s,bd) {
+			      if ("-" == s) { return -1 * bd; } 
+				 else { return bd; }
+			   });
       
       sums.inner = Pr.binop_l(products, Pr.keymap({
 	 "+" : function(a,b) { console.log("add");return a+b; },
@@ -690,9 +696,8 @@ var CFA = (function() {
       }));
 
       exprfunc.inner = Pr.keymap({
-	 "sqrt": Math.sqrt,
-	 
-      });
+	    "sqrt": Math.sqrt,
+      })
 
       number.inner = alt(raw_number,num_expr);
 
