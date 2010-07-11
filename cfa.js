@@ -264,16 +264,12 @@ var CFA = (function() {
 		     many(seq([op_p,term],function(a,b) { return [a,b]; }))],
 		    function(fst,rst) {
 		       var c = fst;
-		       console.log("fst",fst);
-		       console.log("rst",rst);
 		       for (var i = 0; i < rst.length; i++) {
 			  var op = rst[i][0];
 			  var v = rst[i][1];
-			  console.log("op",op);
-			  console.log("v",v);
 			  c = op(c,v);
 		       }
-		       console.log("res",c);
+
 		       return c;
 		    });
       };
@@ -682,8 +678,8 @@ var CFA = (function() {
 			   });
       
       sums.inner = Pr.binop_l(products, Pr.keymap({
-	 "+" : function(a,b) { console.log("add");return a+b; },
-	 "-" : function(a,b) { console.log("sub");return a-b; }
+	 "+" : function(a,b) { return a+b; },
+	 "-" : function(a,b) { ;return a-b; }
       }));
 
       products.inner = Pr.binop_l(exps, Pr.keymap({
