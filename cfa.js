@@ -511,7 +511,7 @@ var CFA = (function() {
    };
    var translate = function(x,y) { return tx(4,[1,0,0,1,x,y]); };
    var scale = function(x,y) { return tx(2,[x,0,0,y,0,0]); };
-   var skew = function(ydeg,xdeg) {
+   var skew = function(xdeg,ydeg) {
       var yrad = Math.PI * ydeg / 180.0;
       var xrad = Math.PI * xdeg / 180.0;
       return tx(1,[1.0,Math.tan(yrad),Math.tan(xrad),1.0,0,0]);
@@ -697,7 +697,15 @@ var CFA = (function() {
 
       exprfunc.inner = Pr.keymap({
 	    "sqrt": Math.sqrt,
-      })
+	    "cos": function(x) { return Math.cos(Math.PI * x / 180.0); },
+	    "sin": function(x) { return Math.sin(Math.PI * x / 180.0); },
+	    "tan": function(x) { return Math.tan(Math.PI * x / 180.0); },
+	    "acos": function(x) { return 180 / Math.PI * Math.acos(x); },
+	    "asin": function(x) { return 180 / Math.PI * Math.asin(x); },
+	    "atan": function(x) { return 180 / Math.PI * Math.atan(x); },
+	    "atan2": function(x,y) { return 180 / Math.PI * Math.atan2(x,y); },
+	    "ln" : Math.log
+      });
 
       number.inner = alt(raw_number,num_expr);
 
