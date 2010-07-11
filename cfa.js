@@ -236,6 +236,8 @@ var CFA = (function() {
 	 });
       };
       
+
+
       var many = function(parser) {
 	 var many_i = nt();
 	 many_i.inner = alt(succeed([]),
@@ -255,6 +257,39 @@ var CFA = (function() {
 	 else
 	    { return lose("Extra input after end:" + s.txt(),s); }
       };
+      
+      // helper: binary ops, folded left 
+      var binop_l = function(term,op_p) { 
+	 return seq([term,
+		     many(seq([op_p,term],function(a,b) { return [a,b]; }))],
+		    function(fst,rst) {
+		       var c = fst;
+		       console.log("fst",fst);
+		       console.log("rst",rst);
+		       for (var i = 0; i < rst.length; i++) {
+			  var op = rst[i][0];
+			  var v = rst[i][1];
+			  console.log("op",op);
+			  console.log("v",v);
+			  c = op(c,v);
+		       }
+		       console.log("res",c);
+		       return c;
+		    });
+      };
+
+      // Helper: literal keys -> corresp values map.
+      var keymap = function(mp) {
+	 var ps = [];
+	 for (var i in mp) {
+	    var p = lit(i);
+	    var v = mp[i];
+	    var ignored = (function(pp,vv) {
+	       ps.push(app(pp, function(_) { return vv; }));
+	    })(p,v);
+	 }
+	 return alt.apply([],ps);
+      }
 
       return {
 	 init : function(str) { return new State(str,0,0,0); },
@@ -269,7 +304,9 @@ var CFA = (function() {
 	 many : many,
 	 eof : end_of_input,
 	 wins : wins,
-	 app : app
+	 app : app,
+	 binop_l : binop_l,
+	 keymap : keymap
       };
    };
 
@@ -617,9 +654,47 @@ var CFA = (function() {
       var seq = Pr.seq; var alt = Pr.alt; var some = Pr.some; var many = Pr.many; var eof = Pr.eof;
       var app = Pr.app;
 
-      var ident = p(/([a-zA-Z0-9]+)/, "identifier");
+      /* Simple tokens: identifiers, filenames, raw numbers. */
+      var ident = p(/([a-zA-Z0-9_]+)/, "identifier");
       var fname = p(/"?([a-zA-Z0-9.]+)"?/, "filename");
-      var number = app(p(/([\-+]?[0-9]*\.?[0-9]+)/,"number"), parseFloat);
+      var raw_number = app(p(/([\-+]?[0-9]*\.?[0-9]+)/,"number"), parseFloat);
+
+      /* Numeric expressions: */
+      var num_expr = nt();
+      var sums = nt(); 
+      var products = nt();
+      var exps = nt(); 
+      var fun = nt();
+      var number = nt();
+      var exprfunc = nt();
+      num_expr.inner = 
+      alt(
+	  seq([lit("("),sums,lit(")")], function(_,ss,_) { return ss; }),
+	  seq([exprfunc, lit("("), sums, lit(")")], function(f,_,ss,_) { return f(ss); }),
+	  seq([exprfunc,lit("("),sums,lit(","),sums,lit(")")],
+	      function(f,_,s1,_,s2,_) { return f(s1,s2); })
+	  );
+      
+      sums.inner = Pr.binop_l(products, Pr.keymap({
+	 "+" : function(a,b) { console.log("add");return a+b; },
+	 "-" : function(a,b) { console.log("sub");return a-b; }
+      }));
+
+      products.inner = Pr.binop_l(exps, Pr.keymap({
+	 "*" : function(a,b) { return a*b; },
+	 "/" : function(a,b) { return a/b; }
+      }));
+      
+      exps.inner = Pr.binop_l(number, Pr.keymap({
+	    "^":function(a,b) { return Math.pow(a,b); }
+      }));
+
+      exprfunc.inner = Pr.keymap({
+	 "sqrt": Math.sqrt,
+	 
+      });
+
+      number.inner = alt(raw_number,num_expr);
 
       // Adjustments:
       var adj = 
@@ -674,7 +749,6 @@ var CFA = (function() {
 	  
       var adjustment = alt(seq([lit("["), many(adj), lit("]")], function(_,adjs,_) {  return compile_adjustment(adjs); }),
 			   seq([lit("{"), many(adj), lit("}")], function(_,adjs,_) { return compile_adjustment(reorder(adjs)); }));
-			   
 
       // Read a rule!
       var rbody = nt();
@@ -690,6 +764,7 @@ var CFA = (function() {
       var statement = alt(seq([ident, adjustment],
 			  function(nm,adj) { return apply_rule(nm,adj); }),
 			  ntimes);
+
       rbody.inner = seq([lit("{"),many(statement), lit("}")],
 		      function(_,b,_) { return b; });
 
